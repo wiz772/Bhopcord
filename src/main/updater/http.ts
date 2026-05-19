@@ -53,8 +53,9 @@ function isUpToDate(releaseTag: string, releaseName: string): boolean {
     if (bhopcordVersion.startsWith("v")) {
         return releaseTag === bhopcordVersion;
     }
-    const shortHash = releaseName.slice(releaseName.lastIndexOf(" ") + 1);
-    return gitHash.startsWith(shortHash);
+    const suffix = releaseName.slice(releaseName.lastIndexOf(" ") + 1);
+    if (suffix.startsWith("v")) return false;
+    return gitHash.startsWith(suffix);
 }
 
 async function calculateGitChanges() {
