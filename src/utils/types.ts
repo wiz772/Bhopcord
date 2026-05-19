@@ -51,6 +51,7 @@ export const PluginTags = [
     "Accessibility",
     "Activity",
     "Appearance",
+    "Bhopcord",
     "Chat",
     "Commands",
     "Console",

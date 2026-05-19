@@ -50,7 +50,7 @@ export default definePlugin({
     name: "AutoReconnect",
     description: "Bhopcord: toggle in the voice channel panel to automatically rejoin if you get disconnected.",
     authors: [{ name: "Bhopcord", id: 0n }],
-    tags: ["Voice", "Utility"],
+    tags: ["Voice", "Utility", "Bhopcord"],
     settings,
 
     patches: [
