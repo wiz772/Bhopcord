@@ -603,15 +603,18 @@ export default definePlugin({
                     cache = cache.update(id, m =>
                         m.set("deleted", true)
                          .set("antiLogTechniques", techniques)
+                         .set("content", msg.editHistory?.[0]?.content ?? m.content)
                          .set("attachments", m.attachments.map(a => ((a.deleted = true), a))),
                     );
                 } else if (shouldIgnore) {
                     cache = cache.remove(id);
                 } else {
                     const techniques = this.detectAntiLogTechniques(msg);
+                    const originalContent = techniques.length > 0 ? msg.editHistory?.[0]?.content : undefined;
                     cache = cache.update(id, m =>
                         m.set("deleted", true)
                          .set("antiLogTechniques", techniques.length ? techniques : undefined)
+                         .set("content", originalContent ?? m.content)
                          .set("attachments", m.attachments.map(a => ((a.deleted = true), a))),
                     );
                 }
