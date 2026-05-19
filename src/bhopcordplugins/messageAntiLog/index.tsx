@@ -9,22 +9,22 @@ import { FluxDispatcher, Menu, MessageActions, showToast, Toasts, UserStore } fr
 const settings = definePluginSettings({
     enabled: {
         type: OptionType.BOOLEAN,
-        description: "Enable AntiLog deletion",
+        description: "Active la suppression anti-log",
         default: true
     },
     emptyMessage: {
         type: OptionType.BOOLEAN,
-        description: "Send an invisible replacement message to overwrite MessageLogger cache",
+        description: "Envoie un message vide de remplacement pour écraser le cache de MessageLogger",
         default: true
     },
     blockMessage: {
         type: OptionType.STRING,
-        description: "Replacement text if empty message is disabled",
+        description: "Texte de remplacement si le message vide est désactivé",
         default: "x"
     },
     deleteInterval: {
         type: OptionType.NUMBER,
-        description: "Delay between delete steps (ms)",
+        description: "Délai entre chaque étape de suppression (ms)",
         default: 200,
         min: 100,
         max: 5000
@@ -148,8 +148,8 @@ const MessageContextPatch: NavContextMenuPatchCallback = (children, props: Messa
 };
 
 export default definePlugin({
-    name: "MessageAntiLog",
-    description: "Delete messages via right-click context menu without MessageLogger seeing them.",
+    name: "MessageDeleteAntiLog",
+    description: "Supprime un message sans que MessageLogger ne détecte la suppression.",
     authors: [{ name: "Bhopcord", id: 0n }],
     tags: ["Chat", "Utility", "Bhopcord"],
     settings,

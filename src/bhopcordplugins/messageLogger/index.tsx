@@ -315,7 +315,7 @@ export function parseEditContent(content: string, message: Message, previousCont
 export const settings = definePluginSettings({
     deleteStyle: {
         type: OptionType.SELECT,
-        description: "The style of deleted messages",
+        description: "Style des messages supprimés",
         default: "text",
         options: [
             { label: "Red text", value: "text", default: true },
@@ -325,61 +325,61 @@ export const settings = definePluginSettings({
     },
     logDeletes: {
         type: OptionType.BOOLEAN,
-        description: "Whether to log deleted messages",
+        description: "Journaliser les messages supprimés",
         default: true,
     },
     collapseDeleted: {
         type: OptionType.BOOLEAN,
-        description: "Whether to collapse deleted messages, similar to blocked messages",
+        description: "Réduire les messages supprimés comme les messages bloqués",
         default: false,
         restartNeeded: true,
     },
     logEdits: {
         type: OptionType.BOOLEAN,
-        description: "Whether to log edited messages",
+        description: "Journaliser les messages édités",
         default: true,
     },
     inlineEdits: {
         type: OptionType.BOOLEAN,
-        description: "Whether to display edit history as part of message content",
+        description: "Afficher l'historique d'édition dans le contenu du message",
         default: true,
     },
     ignoreBots: {
         type: OptionType.BOOLEAN,
-        description: "Whether to ignore messages by bots",
+        description: "Ignorer les messages des bots",
         default: false,
     },
     ignoreSelf: {
         type: OptionType.BOOLEAN,
-        description: "Whether to ignore messages by yourself",
+        description: "Ignorer vos propres messages",
         default: false,
     },
     ignoreSelfEdits: {
         type: OptionType.BOOLEAN,
-        description: "Whether to ignore edits by yourself",
+        description: "Ignorer vos propres éditions",
         default: false,
     },
     ignoreUsers: {
         type: OptionType.STRING,
-        description: "Comma-separated list of user IDs to ignore",
+        description: "Liste d'IDs utilisateurs à ignorer (séparés par des virgules)",
         default: "",
         multiline: true,
     },
     ignoreChannels: {
         type: OptionType.STRING,
-        description: "Comma-separated list of channel IDs to ignore",
+        description: "Liste d'IDs salons à ignorer (séparés par des virgules)",
         default: "",
         multiline: true,
     },
     ignoreGuilds: {
         type: OptionType.STRING,
-        description: "Comma-separated list of guild IDs to ignore",
+        description: "Liste d'IDs serveurs à ignorer (séparés par des virgules)",
         default: "",
         multiline: true,
     },
     showEditDiffs: {
         type: OptionType.BOOLEAN,
-        description: "Show visual differences between edited message versions",
+        description: "Afficher les différences visuelles entre les versions éditées",
         default: false,
         onChange: value => {
             if (!value && settings.store.separatedDiffs) {
@@ -389,7 +389,7 @@ export const settings = definePluginSettings({
     },
     separatedDiffs: {
         type: OptionType.BOOLEAN,
-        description: "Separate addition and removals in diffs for a more readable differential",
+        description: "Séparer les ajouts et suppressions dans les diffs pour une lecture plus claire",
         default: false,
     },
 }, {
@@ -411,7 +411,6 @@ export default definePlugin({
     tags: ["Chat", "Utility", "Bhopcord"],
     authors: [{ name: "Bhopcord", id: 0n }],
     dependencies: ["MessageUpdaterAPI"],
-    isModified: true,
     settings,
 
     contextMenus: {

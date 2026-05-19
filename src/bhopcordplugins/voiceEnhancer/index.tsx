@@ -31,7 +31,7 @@ const settings = definePluginSettings({
     },
     inputBoost: {
         type: OptionType.SLIDER,
-        description: "Microphone input volume multiplier",
+        description: "Multiplicateur du volume du micro",
         markers: makeRange(1, 5, 0.5),
         default: 2,
         stickToMarkers: true,
@@ -43,7 +43,7 @@ const settings = definePluginSettings({
     },
     stereoVoice: {
         type: OptionType.BOOLEAN,
-        description: "Enable stereo audio for your voice (requires restart)",
+        description: "Active le son stéréo pour votre micro (redémarrage requis)",
         default: false,
         restartNeeded: true,
     },
@@ -54,7 +54,7 @@ const settings = definePluginSettings({
     },
     outputBoost: {
         type: OptionType.SLIDER,
-        description: "Boost incoming user volume beyond 200% (requires restart)",
+        description: "Amplifie le volume des autres utilisateurs au-delà de 200% (redémarrage requis)",
         markers: makeRange(1, 5, 0.5),
         default: 2,
         stickToMarkers: true,
@@ -63,7 +63,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "VoiceEnhancer",
-    description: "Boost microphone volume, enable stereo voice, and enhance audio control",
+    description: "Boost micro, voix stéréo et amplification du volume audio.",
     authors: [{ name: "Bhopcord", id: 0n }],
     tags: ["Voice", "Utility", "Bhopcord"],
     settings,

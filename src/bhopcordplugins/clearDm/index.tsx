@@ -11,7 +11,7 @@ import { Alerts, ChannelStore, Constants, FluxDispatcher, Menu, MessageActions, 
 const settings = definePluginSettings({
     antiLog: {
         type: OptionType.BOOLEAN,
-        description: "Dispatch mlDeleted flag to hide deletions from MessageLogger",
+        description: "Cache la suppression aux logger MessageLogger",
         default: false
     }
 });
@@ -124,7 +124,7 @@ const UserContextPatch: NavContextMenuPatchCallback = (children, { user }: UserC
 
 export default definePlugin({
     name: "ClearDM",
-    description: "Clear your DM conversation with a user via right-click context menu.",
+    description: "Supprime tous vos messages dans une conversation privée depuis le menu contextuel.",
     authors: [{ name: "Bhopcord", id: 0n }],
     tags: ["Chat", "Utility", "Bhopcord"],
     settings,

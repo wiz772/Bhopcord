@@ -24,12 +24,12 @@ import {
 const settings = definePluginSettings({
     enabled: {
         type: OptionType.BOOLEAN,
-        description: "Automatically rejoin the last voice channel after an unexpected disconnect.",
+        description: "Rejoint automatiquement le salon vocal après une déconnexion inattendue.",
         default: false
     },
     rejoinDelay: {
         type: OptionType.SLIDER,
-        description: "Seconds to wait before reconnecting.",
+        description: "Secondes d'attente avant de reconnecter.",
         markers: makeRange(1, 10, 1),
         default: 2,
         stickToMarkers: true
@@ -48,7 +48,7 @@ let originalSelectVoiceChannel: typeof ChannelActions.selectVoiceChannel;
 
 export default definePlugin({
     name: "AutoReconnect",
-    description: "Bhopcord: toggle in the voice channel panel to automatically rejoin if you get disconnected.",
+    description: "Bouton dans le panneau vocal pour se reconnecter automatiquement après une déconnexion.",
     authors: [{ name: "Bhopcord", id: 0n }],
     tags: ["Voice", "Utility", "Bhopcord"],
     settings,
