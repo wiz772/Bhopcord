@@ -43,20 +43,29 @@ async function githubGet<T = any>(endpoint: string) {
     return fetchJson<T>(API_BASE + endpoint, {
         headers: {
             Accept: "application/vnd.github+json",
-            // "All API requests MUST include a valid User-Agent header.
-            // Requests with no User-Agent header will be rejected."
             "User-Agent": VENCORD_USER_AGENT
         }
     });
 }
 
+function extractHashFromReleaseName(name: string): string {
+    return name.slice(name.lastIndexOf(" ") + 1);
+}
+
 async function calculateGitChanges() {
-    const isOutdated = await fetchUpdates();
-    if (!isOutdated) return [];
+    const release = await githubGet<{ name: string; tag_name: string; assets: { name: string; browser_download_url: string; }[]; }>("/releases/latest");
+    const shortHash = extractHashFromReleaseName(release.name);
 
-    const data = await githubGet(`/compare/${gitHash}...HEAD`);
+    if (gitHash.startsWith(shortHash))
+        return [];
 
-    return data.commits.map((c: any) => ({
+    const asset = release.assets.find(a => a.name === ASAR_FILE);
+    if (asset)
+        PendingUpdate = asset.browser_download_url;
+
+    const compare = await githubGet<{ commits: any[]; }>(`/compare/${gitHash}...${release.tag_name}`);
+
+    return compare.commits.map(c => ({
         hash: c.sha,
         author: c.author?.login ?? c.commit?.author?.name ?? "Ghost",
         message: c.commit.message.split("\n")[0]
@@ -64,15 +73,17 @@ async function calculateGitChanges() {
 }
 
 async function fetchUpdates() {
-    const data = await githubGet("/releases/latest");
+    const release = await githubGet<{ name: string; tag_name: string; assets: { name: string; browser_download_url: string; }[]; }>("/releases/latest");
+    const shortHash = extractHashFromReleaseName(release.name);
 
-    const shortHash = data.name.slice(data.name.lastIndexOf(" ") + 1);
     if (gitHash.startsWith(shortHash))
         return false;
 
-    const asset = data.assets.find(a => a.name === ASAR_FILE);
-    PendingUpdate = asset.browser_download_url;
+    const asset = release.assets.find(a => a.name === ASAR_FILE);
+    if (!asset)
+        return false;
 
+    PendingUpdate = asset.browser_download_url;
     return true;
 }
 
@@ -84,7 +95,6 @@ async function applyUpdates() {
     writeFileSync(asarPath, data, { flush: true });
 
     PendingUpdate = null;
-
     return true;
 }
 
