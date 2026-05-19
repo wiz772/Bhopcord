@@ -15,7 +15,7 @@ import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { findCssClassesLazy } from "@webpack";
-import { ChannelStore, FluxDispatcher, Menu, MessageStore, Parser, SelectedChannelStore, Timestamp, UserStore, useStateFromStores } from "@webpack/common";
+import { ChannelStore, FluxDispatcher, Menu, MessageCache, MessageStore, Parser, SelectedChannelStore, Timestamp, UserStore, useStateFromStores } from "@webpack/common";
 
 import overlayStyle from "./deleteStyleOverlay.css?managed";
 import textStyle from "./deleteStyleText.css?managed";
@@ -33,6 +33,17 @@ interface MLMessage extends Message {
 const MessageClasses = findCssClassesLazy("edited", "communicationDisabled", "isSystemMessage");
 
 const disabledDiffMessages = new Set<string>();
+
+const deletedMessagesCache = new Map<string, { content: string; channelId: string; }>();
+
+function cacheDeletedMessage(id: string, content: string, channelId: string) {
+    const entry = { content, channelId };
+    deletedMessagesCache.set(id, entry);
+    setTimeout(() => {
+        if (deletedMessagesCache.get(id) === entry)
+            deletedMessagesCache.delete(id);
+    }, 5000);
+}
 
 function scheduleMicrotask(fn: () => void) {
     if (typeof queueMicrotask === "function") queueMicrotask(fn);
@@ -421,6 +432,40 @@ export default definePlugin({
         "gdm-context": patchChannelContextMenu,
     },
 
+    flux: {
+        MESSAGE_CREATE(msg: any) {
+            if (!msg.nonce || deletedMessagesCache.size === 0) return;
+
+            const nonce = String(msg.nonce);
+            const entry = deletedMessagesCache.get(nonce);
+            if (!entry || entry.channelId !== msg.channel_id) return;
+
+            if (msg.content !== entry.content) {
+                const channelCache = MessageCache.getOrCreate(entry.channelId);
+                if (channelCache.has(nonce)) {
+                    const updated = channelCache.update(nonce, m =>
+                        m.set("content", entry.content)
+                         .set("antiLogTechniques", [
+                             ...(m.antiLogTechniques || []),
+                             "AntiLog: remplacement par nonce"
+                         ])
+                    );
+                    MessageCache.commit(updated);
+                    MessageStore.emitChange();
+                }
+
+                FluxDispatcher.dispatch({
+                    type: "MESSAGE_DELETE",
+                    channelId: msg.channel_id,
+                    id: msg.id,
+                    mlDeleted: true,
+                });
+            }
+
+            deletedMessagesCache.delete(nonce);
+        }
+    },
+
     start() {
         addDeleteStyle();
     },
@@ -617,6 +662,7 @@ export default definePlugin({
                          .set("content", originalContent ?? m.content)
                          .set("attachments", m.attachments.map(a => ((a.deleted = true), a))),
                     );
+                    cacheDeletedMessage(id, msg.content, msg.channel_id);
                 }
             };
 
