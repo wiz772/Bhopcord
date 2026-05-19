@@ -34,6 +34,10 @@ declare module "~git-remote" {
     const remote: string;
     export default remote;
 }
+declare module "~bhopcord-version" {
+    const version: string;
+    export default version;
+}
 
 declare module "file://*" {
     const content: string;

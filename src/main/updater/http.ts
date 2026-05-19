@@ -23,6 +23,7 @@ import { ipcMain } from "electron";
 import { writeFileSync } from "original-fs";
 import { sep } from "path";
 
+import bhopcordVersion from "~bhopcord-version";
 import gitHash from "~git-hash";
 import gitRemote from "~git-remote";
 
@@ -48,15 +49,18 @@ async function githubGet<T = any>(endpoint: string) {
     });
 }
 
-function extractHashFromReleaseName(name: string): string {
-    return name.slice(name.lastIndexOf(" ") + 1);
+function isUpToDate(releaseTag: string, releaseName: string): boolean {
+    if (bhopcordVersion.startsWith("v")) {
+        return releaseTag === bhopcordVersion;
+    }
+    const shortHash = releaseName.slice(releaseName.lastIndexOf(" ") + 1);
+    return gitHash.startsWith(shortHash);
 }
 
 async function calculateGitChanges() {
     const release = await githubGet<{ name: string; tag_name: string; assets: { name: string; browser_download_url: string; }[]; }>("/releases/latest");
-    const shortHash = extractHashFromReleaseName(release.name);
 
-    if (gitHash.startsWith(shortHash))
+    if (isUpToDate(release.tag_name, release.name))
         return [];
 
     const asset = release.assets.find(a => a.name === ASAR_FILE);
@@ -74,9 +78,8 @@ async function calculateGitChanges() {
 
 async function fetchUpdates() {
     const release = await githubGet<{ name: string; tag_name: string; assets: { name: string; browser_download_url: string; }[]; }>("/releases/latest");
-    const shortHash = extractHashFromReleaseName(release.name);
 
-    if (gitHash.startsWith(shortHash))
+    if (isUpToDate(release.tag_name, release.name))
         return false;
 
     const asset = release.assets.find(a => a.name === ASAR_FILE);

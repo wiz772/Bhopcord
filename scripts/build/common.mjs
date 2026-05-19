@@ -248,6 +248,24 @@ export const gitRemotePlugin = {
 /**
  * @type {import("esbuild").Plugin}
  */
+export const bhopcordVersionPlugin = {
+    name: "bhopcord-version-plugin",
+    setup: build => {
+        const filter = /^~bhopcord-version$/;
+        build.onResolve({ filter }, args => ({
+            namespace: "bhopcord-version", path: args.path
+        }));
+        build.onLoad({ filter, namespace: "bhopcord-version" }, () => ({
+            contents: `export default ${JSON.stringify(
+                process.env.BHOPCORD_VERSION || execSync("git rev-parse --short HEAD", { encoding: "utf-8" }).trim()
+            )}`
+        }));
+    }
+};
+
+/**
+ * @type {import("esbuild").Plugin}
+ */
 export const fileUrlPlugin = {
     name: "file-uri-plugin",
     setup: build => {
@@ -355,7 +373,7 @@ export const commonOpts = {
     sourcemap: watch ? "inline" : "external",
     legalComments: "linked",
     banner,
-    plugins: [fileUrlPlugin, gitHashPlugin, gitRemotePlugin, stylePlugin],
+    plugins: [fileUrlPlugin, gitHashPlugin, gitRemotePlugin, bhopcordVersionPlugin, stylePlugin],
     external: ["~plugins", "~git-hash", "~git-remote", "/assets/*"],
     inject: [join(dirname(fileURLToPath(import.meta.url)), "inject/react.mjs")],
     jsx: "transform",
