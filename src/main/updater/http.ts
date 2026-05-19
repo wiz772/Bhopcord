@@ -21,6 +21,7 @@ import { IpcEvents } from "@shared/IpcEvents";
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
 import { ipcMain } from "electron";
 import { writeFileSync } from "original-fs";
+import { sep } from "path";
 
 import gitHash from "~git-hash";
 import gitRemote from "~git-remote";
@@ -29,6 +30,14 @@ import { ASAR_FILE, serializeErrors } from "./common";
 
 const API_BASE = `https://api.github.com/repos/${gitRemote}`;
 let PendingUpdate: string | null = null;
+
+function getAsarFilePath(): string {
+    const parts = __dirname.split(sep);
+    const asarIndex = parts.findIndex(p => p.endsWith(".asar"));
+    if (asarIndex !== -1)
+        return parts.slice(0, asarIndex + 1).join(sep);
+    return __dirname;
+}
 
 async function githubGet<T = any>(endpoint: string) {
     return fetchJson<T>(API_BASE + endpoint, {
@@ -71,7 +80,8 @@ async function applyUpdates() {
     if (!PendingUpdate) return true;
 
     const data = await fetchBuffer(PendingUpdate);
-    writeFileSync(__dirname, data, { flush: true });
+    const asarPath = getAsarFilePath();
+    writeFileSync(asarPath, data, { flush: true });
 
     PendingUpdate = null;
 
