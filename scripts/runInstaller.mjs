@@ -25,9 +25,9 @@ import { Readable } from "stream";
 import { finished } from "stream/promises";
 import { fileURLToPath } from "url";
 
-const BASE_URL = "https://github.com/Equicord/Equilotl/releases/latest/download/";
-const INSTALLER_PATH_DARWIN = "Equilotl.app/Contents/MacOS/Equilotl";
-const INSTALLER_APP_DARWIN = "Equilotl.app";
+const BASE_URL = "https://github.com/wiz772/Bhoplotl/releases/latest/download/";
+const INSTALLER_PATH_DARWIN = "Bhoplotl.app/Contents/MacOS/Bhoplotl";
+const INSTALLER_APP_DARWIN = "Bhoplotl.app";
 
 const BASE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FILE_DIR = join(BASE_DIR, "dist", "Installer");
@@ -36,18 +36,18 @@ const ETAG_FILE = join(FILE_DIR, "etag.txt");
 function getFilename() {
     switch (process.platform) {
         case "win32":
-            return "EquilotlCli.exe";
+            return "BhoplotlCli.exe";
         case "darwin":
             switch (process.arch) {
                 case "x64":
-                    return "Equilotl-darwin-x64.zip";
+                    return "Bhoplotl-darwin-x64.zip";
                 case "arm64":
-                    return "Equilotl-darwin-arm64.zip";
+                    return "Bhoplotl-darwin-arm64.zip";
                 default:
                     throw new Error("Unsupported macOS architecture: " + process.arch);
             }
         case "linux":
-            return "EquilotlCli-linux";
+            return "BhoplotlCli-linux";
         default:
             throw new Error("Unsupported platform: " + process.platform);
     }
@@ -73,7 +73,7 @@ async function ensureBinary() {
 
     const res = await fetch(BASE_URL + filename, {
         headers: {
-            "User-Agent": "Equicord (https://github.com/Equicord/Equicord)",
+            "User-Agent": "Bhoplotl (https://github.com/wiz772/Bhoplotl)",
             "If-None-Match": etag
         }
     });
@@ -133,9 +133,9 @@ try {
         stdio: "inherit",
         env: {
             ...process.env,
-            EQUICORD_USER_DATA_DIR: BASE_DIR,
-            EQUICORD_DIRECTORY: join(BASE_DIR, "dist/desktop"),
-            EQUICORD_DEV_INSTALL: "1"
+            BHOPCORD_USER_DATA_DIR: BASE_DIR,
+            BHOPCORD_DIRECTORY: join(BASE_DIR, "dist/desktop"),
+            BHOPCORD_DEV_INSTALL: "1"
         }
     });
 } catch {
