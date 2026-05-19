@@ -66,8 +66,8 @@ async function calculateGitChanges() {
 async function fetchUpdates() {
     const data = await githubGet("/releases/latest");
 
-    const hash = data.name.slice(data.name.lastIndexOf(" ") + 1);
-    if (hash === gitHash)
+    const shortHash = data.name.slice(data.name.lastIndexOf(" ") + 1);
+    if (gitHash.startsWith(shortHash))
         return false;
 
     const asset = data.assets.find(a => a.name === ASAR_FILE);

@@ -49,10 +49,11 @@ if (!IS_COMPANION_TEST && process.argv.includes("--companion-test"))
 
 export const IS_UPDATER_DISABLED = process.argv.includes("--disable-updater");
 export const gitHash = process.env.EQUICORD_HASH || execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
+export const gitShortHash = gitHash.slice(0, 10);
 
 export const banner = {
     js: `
-// Equicord ${gitHash}
+// Bhopcord ${gitShortHash}
 // Standalone: ${IS_STANDALONE}
 // Platform: ${IS_STANDALONE === false ? process.platform : "Universal"}
 // Updater Disabled: ${IS_UPDATER_DISABLED}
