@@ -272,7 +272,9 @@ export async function getEntryPoint(dir: string, dirent: Dirent) {
     throw new Error(`${dirent.name}: Couldn't find entry point`);
 }
 
-export function isPluginFile({ name }: { name: string; }) {
+export function isPluginFile(dirent: { name: string; isDirectory(): boolean; }) {
+    const { name } = dirent;
     if (name === "index.ts") return false;
-    return !name.startsWith("_") && !name.startsWith(".");
+    if (name.startsWith("_") || name.startsWith(".")) return false;
+    return dirent.isDirectory() || /\.tsx?$/.test(name);
 }

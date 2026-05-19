@@ -14,6 +14,7 @@ import { Logger } from "@utils/Logger";
 import { Plugin } from "@utils/types";
 import { React, showToast, Toasts } from "@webpack/common";
 
+import { BHOPCORD_LOGO_SRC } from "@utils/bhopcordAssets";
 import { PluginMeta } from "~plugins";
 
 import { openPluginModal } from "./PluginModal";
@@ -32,6 +33,7 @@ interface PluginCardProps extends React.HTMLProps<HTMLDivElement> {
 export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, onMouseLeave, isNew }: PluginCardProps) {
     const settings = Settings.plugins[plugin.name];
     const pluginMeta = PluginMeta[plugin.name];
+    const isBhopcordPlugin = pluginMeta.folderName.startsWith("src/bhopcordplugins/") ?? false;
     const isEquicordPlugin = pluginMeta.folderName.startsWith("src/equicordplugins/") ?? false;
     const isVencordPlugin = pluginMeta.folderName.startsWith("src/plugins/") ?? false;
     const isUserPlugin = pluginMeta?.userPlugin ?? false;
@@ -95,6 +97,12 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
             src: "https://equicord.org/assets/icons/equicord/modified.png",
             alt: "Modified",
             title: "Modified Vencord Plugin"
+        },
+        {
+            condition: isBhopcordPlugin,
+            src: BHOPCORD_LOGO_SRC,
+            alt: "Bhopcord",
+            title: "Bhopcord Plugin"
         },
         {
             condition: isEquicordPlugin,

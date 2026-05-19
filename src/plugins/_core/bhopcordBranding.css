@@ -1,0 +1,25 @@
+:root {
+    --vc-bhopcord-logo: none;
+}
+
+/* Discord home / DM button at the top of the guild list */
+nav[class*="guilds_"] .vc-bhopcord-home-target [class*="childWrapper"] {
+    background-image: var(--vc-bhopcord-logo) !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+}
+
+nav[class*="guilds_"] .vc-bhopcord-home-target [class*="childWrapper"] svg,
+nav[class*="guilds_"] .vc-bhopcord-home-target [class*="childWrapper"] img:not(.vc-bhopcord-home-logo) {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+.vc-bhopcord-home-logo {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}
