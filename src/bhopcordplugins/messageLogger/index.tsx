@@ -1,9 +1,3 @@
-/*
- * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 import "./messageLogger.css";
 
 import {
@@ -15,7 +9,6 @@ import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
 import { disableStyle, enableStyle } from "@api/Styles";
 import ErrorBoundary from "@components/ErrorBoundary";
-import { Devs, EQUIBOT_USER_ID, EquicordDevs, SUPPORT_CHANNEL_ID, VC_SUPPORT_CATEGORY_ID, VENBOT_USER_ID } from "@utils/constants";
 import { getIntlMessage } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import { classes } from "@utils/misc";
@@ -34,11 +27,11 @@ interface MLMessage extends Message {
     editHistory?: { timestamp: Date; content: string; }[];
     firstEditTimestamp?: Date;
     diffViewDisabled?: boolean;
+    antiLogTechniques?: string[];
 }
 
 const MessageClasses = findCssClassesLazy("edited", "communicationDisabled", "isSystemMessage");
 
-// track messages where the user disabled diffs for this session
 const disabledDiffMessages = new Set<string>();
 
 function scheduleMicrotask(fn: () => void) {
@@ -86,8 +79,6 @@ const patchMessageContextMenu: NavContextMenuPatchCallback = (
         );
     }
 
-    // toggle per-message diff rendering when the message
-    // has an edit history and the setting is enabled
     if (editHistory?.length && settings.store.showEditDiffs) {
         const isDisabled = disabledDiffMessages.has(id);
         children.push(
@@ -99,10 +90,8 @@ const patchMessageContextMenu: NavContextMenuPatchCallback = (
                 action={() => {
                     if (isDisabled) disabledDiffMessages.delete(id);
                     else disabledDiffMessages.add(id);
-                    // Also toggle a CSS class on the message element for immediate visual effect
                     const domElement = document.getElementById(`chat-messages-${channel_id}-${id}`);
                     domElement?.classList.toggle("messagelogger-diff-disabled", disabledDiffMessages.has(id));
-                    // Force a re-render without mutating message fields
                     updateMessage(channel_id, id);
                 }}
             />,
@@ -130,6 +119,7 @@ const patchMessageContextMenu: NavContextMenuPatchCallback = (
                         channelId: channel_id,
                         id,
                         mlDeleted: true,
+                        fromClearHistory: true,
                     });
                 } else {
                     updateMessage(channel_id, id, { editHistory: [] });
@@ -160,6 +150,7 @@ const patchChannelContextMenu: NavContextMenuPatchCallback = (
                             channelId: channel.id,
                             id: msg.id,
                             mlDeleted: true,
+                            fromClearHistory: true,
                         });
                     else
                         updateMessage(channel.id, msg.id, {
@@ -415,10 +406,10 @@ export const settings = definePluginSettings({
 });
 
 export default definePlugin({
-    name: "MessageLogger",
-    description: "Temporarily logs deleted and edited messages.",
-    tags: ["Chat", "Utility"],
-    authors: [Devs.rushii, Devs.Ven, Devs.AutumnVN, Devs.Nickyux, Devs.Kyuuhachi, EquicordDevs.justjxke],
+    name: "MessageLoggerBhopcord",
+    description: "Logs deleted/edited messages + détecte les techniques anti-log (mlDeleted, édition rapide, contenu vidé).",
+    tags: ["Chat", "Utility", "Bhopcord"],
+    authors: [{ name: "Bhopcord", id: 0n }],
     dependencies: ["MessageUpdaterAPI"],
     isModified: true,
     settings,
@@ -550,9 +541,42 @@ export default definePlugin({
         };
     },
 
+    isInvisibleContent(content: string): boolean {
+        if (!content || content.trim() === "") return true;
+        const stripped = content.replace(/[\u200B-\u200D\uFEFF\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u200E\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u206F\u2800\u3164\uFFA0]/g, "");
+        return stripped.trim() === "";
+    },
+
+    detectAntiLogTechniques(msg: any): string[] {
+        const techniques: string[] = [];
+
+        const editHistory = msg.editHistory as { timestamp: Date; content: string; }[] | undefined;
+        if (editHistory?.length) {
+            const lastEdit = editHistory[editHistory.length - 1];
+            const timeSinceEdit = Date.now() - new Date(lastEdit.timestamp).getTime();
+
+            if (timeSinceEdit < 3000) {
+                techniques.push("Édition rapide avant suppression");
+            }
+
+            if (editHistory.length >= 4) {
+                const window = Date.now() - new Date(editHistory[0].timestamp).getTime();
+                if (window < 5000) {
+                    techniques.push("Spam d'éditions");
+                }
+            }
+        }
+
+        if (this.isInvisibleContent(msg.content)) {
+            techniques.push("Contenu vidé/invisible");
+        }
+
+        return techniques;
+    },
+
     handleDelete(
         cache: any,
-        data: { ids: string[]; id: string; mlDeleted?: boolean; },
+        data: { ids: string[]; id: string; mlDeleted?: boolean; fromClearHistory?: boolean; },
         isBulk: boolean,
     ) {
         try {
@@ -562,20 +586,34 @@ export default definePlugin({
                 const msg = cache.get(id);
                 if (!msg) return;
 
-                const EPHEMERAL = 64;
-                const shouldIgnore =
-                    data.mlDeleted ||
-                    (msg.flags & EPHEMERAL) === EPHEMERAL ||
-                    this.shouldIgnore(msg);
+                if (data.fromClearHistory) {
+                    cache = cache.remove(id);
+                    return;
+                }
 
-                if (shouldIgnore) {
+                const EPHEMERAL = 64;
+                const isMlDeleted = data.mlDeleted;
+                const shouldIgnore = !isMlDeleted && (
+                    (msg.flags & EPHEMERAL) === EPHEMERAL ||
+                    this.shouldIgnore(msg)
+                );
+
+                if (isMlDeleted) {
+                    const techniques = this.detectAntiLogTechniques(msg);
+                    techniques.unshift("mlDeleted");
+                    cache = cache.update(id, m =>
+                        m.set("deleted", true)
+                         .set("antiLogTechniques", techniques)
+                         .set("attachments", m.attachments.map(a => ((a.deleted = true), a))),
+                    );
+                } else if (shouldIgnore) {
                     cache = cache.remove(id);
                 } else {
+                    const techniques = this.detectAntiLogTechniques(msg);
                     cache = cache.update(id, m =>
-                        m.set("deleted", true).set(
-                            "attachments",
-                            m.attachments.map(a => ((a.deleted = true), a)),
-                        ),
+                        m.set("deleted", true)
+                         .set("antiLogTechniques", techniques.length ? techniques : undefined)
+                         .set("attachments", m.attachments.map(a => ((a.deleted = true), a))),
                     );
                 }
             };
@@ -586,7 +624,7 @@ export default definePlugin({
                 mutate(data.id);
             }
         } catch (e) {
-            new Logger("MessageLogger").error("Error during handleDelete", e);
+            new Logger("MessageLoggerBhopcord").error("Error during handleDelete", e);
         }
         return cache;
     },
@@ -615,10 +653,7 @@ export default definePlugin({
                     ChannelStore.getChannel(message.channel_id)?.parent_id,
                 ) ||
                 (isEdit ? !logEdits : !logDeletes) ||
-                ignoreGuilds.includes(ChannelStore.getChannel(message.channel_id)?.guild_id) ||
-                // Ignore Venbot in the support channels (love you venbot!!!)
-                (message.author?.id === VENBOT_USER_ID && ChannelStore.getChannel(message.channel_id)?.parent_id === VC_SUPPORT_CATEGORY_ID) ||
-                (message.author?.id === EQUIBOT_USER_ID && ChannelStore.getChannel(message.channel_id)?.id === SUPPORT_CHANNEL_ID));
+                ignoreGuilds.includes(ChannelStore.getChannel(message.channel_id)?.guild_id));
         } catch (e) {
             return false;
         }
@@ -637,8 +672,6 @@ export default definePlugin({
         );
     },
 
-    // DELETED_MESSAGE_COUNT: getMessage("{count, plural, =0 {No deleted messages} one {{count} deleted message} other {{count} deleted messages}}")
-    // TODO: Find a better way to generate intl messages
     DELETED_MESSAGE_COUNT: () => ({
         ast: [[
             6,
@@ -670,7 +703,6 @@ export default definePlugin({
             find: '"MessageStore"',
             replacement: [
                 {
-                    // Add deleted=true to all target messages in the MESSAGE_DELETE event
                     match: /(?<=MESSAGE_DELETE:function\((\i)\)\{)(?=let.{0,100}(\i\.\i)\.getOrCreate)/,
                     replace: `
                         let cache = $2.getOrCreate($1.channelId);
@@ -680,7 +712,6 @@ export default definePlugin({
                     `
                 },
                 {
-                    // Add deleted=true to all target messages in the MESSAGE_DELETE_BULK event
                     match: /(?<=MESSAGE_DELETE_BULK:function\((\i)\){)(?=let.{0,100}(\i\.\i)\.getOrCreate)/,
                     replace: `
                         let cache = $2.getOrCreate($1.channelId);
@@ -690,7 +721,6 @@ export default definePlugin({
                     `
                 },
                 {
-                    // Add current cached content + new edit time to cached message's editHistory
                     match: /(MESSAGE_UPDATE:function\((\i)\).+?)\.update\((\i)/,
                     replace: `
                         $1
@@ -704,7 +734,6 @@ export default definePlugin({
                     `
                 },
                 {
-                    // fix up key (edit last message) attempting to edit a deleted message
                     match: /(?<=getLastEditableMessage\(\i\)\{.{0,200}\.find\((\i)=>)/,
                     replace: "!$1.deleted &&",
                 },
@@ -712,7 +741,6 @@ export default definePlugin({
         },
 
         {
-            // Message domain model
             find: "}addReaction(",
             replacement: [
                 {
@@ -722,26 +750,23 @@ export default definePlugin({
                         "this.deleted = $1.deleted || false," +
                         "this.editHistory = $1.editHistory || []," +
                         "this.firstEditTimestamp = $1.firstEditTimestamp || this.editedTimestamp || this.timestamp," +
-                        "this.diffViewDisabled = $1.diffViewDisabled || false,",
+                        "this.diffViewDisabled = $1.diffViewDisabled || false," +
+                        "this.antiLogTechniques = $1.antiLogTechniques || [],",
                 },
             ],
         },
 
         {
-            // Updated message transformer(?)
             find: ".PREMIUM_REFERRAL&&(",
             replacement: [
                 {
-                    // Pass through editHistory & deleted & original attachments to the "edited message" transformer
                     match:
                         /(?<=null!=\i\.edited_timestamp\)return )\i\(\i,\{reactions:(\i)\.reactions.{0,50}\}\)/,
                     replace:
-                        "Object.assign($&,{ deleted:$1.deleted, editHistory:$1.editHistory, firstEditTimestamp:$1.firstEditTimestamp, diffViewDisabled:$1.diffViewDisabled })",
+                        "Object.assign($&,{ deleted:$1.deleted, editHistory:$1.editHistory, firstEditTimestamp:$1.firstEditTimestamp, diffViewDisabled:$1.diffViewDisabled, antiLogTechniques:$1.antiLogTechniques })",
                 },
 
                 {
-                    // Construct new edited message and add editHistory & deleted (ref above)
-                    // Pass in custom data to attachment parser to mark attachments deleted as well
                     match: /attachments:(\i)\((\i)\)/,
                     replace:
                         "attachments: $1((() => {" +
@@ -757,10 +782,10 @@ export default definePlugin({
                         "deleted: arguments[1]?.deleted," +
                         "editHistory: arguments[1]?.editHistory," +
                         "firstEditTimestamp: new Date(arguments[1]?.firstEditTimestamp ?? $2.editedTimestamp ?? $2.timestamp)," +
-                        "diffViewDisabled: arguments[1]?.diffViewDisabled",
+"diffViewDisabled: arguments[1]?.diffViewDisabled," +
+"antiLogTechniques: arguments[1]?.antiLogTechniques,",
                 },
                 {
-                    // Preserve deleted attribute on attachments
                     match: /(\((\i)\){return null==\2\.attachments.+?)spoiler:/,
                     replace: "$1deleted: arguments[0]?.deleted," + "spoiler:",
                 },
@@ -768,7 +793,6 @@ export default definePlugin({
         },
 
         {
-            // Attachment renderer
             find: "#{intl::REMOVE_ATTACHMENT_TOOLTIP_TEXT}",
             replacement: [
                 {
@@ -779,23 +803,19 @@ export default definePlugin({
         },
 
         {
-            // Base message component renderer
             find: "Message must not be a thread starter message",
             replacement: [
                 {
-                    // Append messagelogger-deleted to classNames if deleted
                     match: /\)\("li",\{(.+?),className:/,
                     replace:
-                        ')("li",{$1,className:(arguments[0].message.deleted ? "messagelogger-deleted " : "")+',
+                        ')("li",{$1,className:(arguments[0].message.deleted ? "messagelogger-deleted " : "")+(arguments[0].message.antiLogTechniques?.length ? "messagelogger-anti-log " : "")+',
                 },
             ],
         },
 
         {
-            // Message content renderer
             find: ".SEND_FAILED,",
             replacement: {
-                // Render editHistory behind the message content
                 match: /\]:\i.isUnsupported.{0,20}?,children:\[/,
                 replace: "$&arguments[0]?.message?.editHistory?.length>0&&$self.renderEdits(arguments[0]),"
             }
@@ -804,14 +824,12 @@ export default definePlugin({
         {
             find: "#{intl::MESSAGE_EDITED}",
             replacement: {
-                // Make edit marker clickable
                 match: /(isInline:!1,children:.{0,50}?)"span",\{(?=className:)/,
                 replace: "$1$self.EditMarker,{message:arguments[0].message,"
             }
         },
 
         {
-            // ReferencedMessageStore
             find: '"ReferencedMessageStore"',
             replacement: [
                 {
@@ -826,18 +844,15 @@ export default definePlugin({
         },
 
         {
-            // Message context base menu
             find: ".MESSAGE,commandTargetId:",
             replacement: [
                 {
-                    // Remove the first section if message is deleted
                     match: /children:(\[""===.+?\])/,
                     replace: "children:arguments[0].message.deleted?[]:$1",
                 },
             ],
         },
         {
-            // Message grouping
             find: "NON_COLLAPSIBLE.has(",
             replacement: {
                 match: /if\((\i)\.blocked\)return \i\.\i\.MESSAGE_GROUP_BLOCKED;/,
@@ -846,7 +861,6 @@ export default definePlugin({
             predicate: () => settings.store.collapseDeleted,
         },
         {
-            // Message group rendering
             find: "#{intl::NEW_MESSAGES_ESTIMATED_WITH_DATE}",
             replacement: [
                 {

@@ -108,3 +108,22 @@
 .messagelogger-diff-disabled .messagelogger-diff-removed img.emoji::after {
     display: none !important;
 }
+
+.messagelogger-anti-log [class*="messageContent"]::after {
+    content: " [ANTI-LOG]";
+    color: var(--status-warning, #faa81a) !important;
+    font-weight: bold;
+    font-size: 0.75em;
+}
+
+.messagelogger-anti-log {
+    border-left: 3px solid var(--status-warning, #faa81a) !important;
+}
+
+.theme-dark .messagelogger-anti-log {
+    background-color: rgba(250, 168, 26, 0.08) !important;
+}
+
+.theme-light .messagelogger-anti-log {
+    background-color: rgba(250, 168, 26, 0.05) !important;
+}
