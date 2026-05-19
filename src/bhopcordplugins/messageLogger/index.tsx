@@ -440,27 +440,25 @@ export default definePlugin({
             const entry = deletedMessagesCache.get(nonce);
             if (!entry || entry.channelId !== msg.channel_id) return;
 
-            if (msg.content !== entry.content) {
-                const channelCache = MessageCache.getOrCreate(entry.channelId);
-                if (channelCache.has(nonce)) {
-                    const updated = channelCache.update(nonce, m =>
-                        m.set("content", entry.content)
-                         .set("antiLogTechniques", [
-                             ...(m.antiLogTechniques || []),
-                             "AntiLog: remplacement par nonce"
-                         ])
-                    );
-                    MessageCache.commit(updated);
-                    MessageStore.emitChange();
-                }
-
-                FluxDispatcher.dispatch({
-                    type: "MESSAGE_DELETE",
-                    channelId: msg.channel_id,
-                    id: msg.id,
-                    mlDeleted: true,
-                });
+            const channelCache = MessageCache.getOrCreate(entry.channelId);
+            if (channelCache.has(nonce)) {
+                const updated = channelCache.update(nonce, m =>
+                    m.set("content", entry.content)
+                     .set("antiLogTechniques", [
+                         ...(m.antiLogTechniques || []),
+                         "AntiLog: remplacement par nonce"
+                     ])
+                );
+                MessageCache.commit(updated);
+                MessageStore.emitChange();
             }
+
+            FluxDispatcher.dispatch({
+                type: "MESSAGE_DELETE",
+                channelId: msg.channel_id,
+                id: msg.id,
+                mlDeleted: true,
+            });
 
             deletedMessagesCache.delete(nonce);
         }
@@ -630,6 +628,8 @@ export default definePlugin({
                 const msg = cache.get(id);
                 if (!msg) return;
 
+                if (msg.deleted && !data.fromClearHistory) return;
+
                 if (data.fromClearHistory) {
                     cache = cache.remove(id);
                     return;
@@ -645,24 +645,27 @@ export default definePlugin({
                 if (isMlDeleted) {
                     const techniques = this.detectAntiLogTechniques(msg);
                     techniques.unshift("mlDeleted");
+                    const restoredContent = msg.editHistory?.[0]?.content ?? msg.content;
                     cache = cache.update(id, m =>
                         m.set("deleted", true)
                          .set("antiLogTechniques", techniques)
-                         .set("content", msg.editHistory?.[0]?.content ?? m.content)
+                         .set("content", restoredContent)
                          .set("attachments", m.attachments.map(a => ((a.deleted = true), a))),
                     );
+                    cacheDeletedMessage(id, restoredContent, msg.channel_id);
                 } else if (shouldIgnore) {
                     cache = cache.remove(id);
                 } else {
                     const techniques = this.detectAntiLogTechniques(msg);
                     const originalContent = techniques.length > 0 ? msg.editHistory?.[0]?.content : undefined;
+                    const restoredContent = originalContent ?? msg.content;
                     cache = cache.update(id, m =>
                         m.set("deleted", true)
                          .set("antiLogTechniques", techniques.length ? techniques : undefined)
-                         .set("content", originalContent ?? m.content)
+                         .set("content", restoredContent)
                          .set("attachments", m.attachments.map(a => ((a.deleted = true), a))),
                     );
-                    cacheDeletedMessage(id, msg.content, msg.channel_id);
+                    cacheDeletedMessage(id, restoredContent, msg.channel_id);
                 }
             };
 
