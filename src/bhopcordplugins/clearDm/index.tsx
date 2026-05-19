@@ -1,0 +1,134 @@
+import "./style.css";
+
+import { NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { definePluginSettings } from "@api/Settings";
+import { sleep } from "@utils/misc";
+import { Queue } from "@utils/Queue";
+import definePlugin, { OptionType } from "@utils/types";
+import type { Channel, User } from "@vencord/discord-types";
+import { Alerts, ChannelStore, Constants, FluxDispatcher, Menu, MessageActions, MessageStore, RestAPI, showToast, Toasts, UserStore } from "@webpack/common";
+
+const settings = definePluginSettings({
+    antiLog: {
+        type: OptionType.BOOLEAN,
+        description: "Dispatch mlDeleted flag to hide deletions from MessageLogger",
+        default: false
+    }
+});
+
+const deleteQueue = new Queue();
+const DELETE_DELAY_MS = 350;
+
+interface UserContextProps {
+    channel?: Channel;
+    guildId?: string;
+    user?: User;
+}
+
+async function fetchAllMessages(channelId: string, before?: string): Promise<any[]> {
+    const res = await RestAPI.get({
+        url: Constants.Endpoints.MESSAGES(channelId),
+        query: { limit: 100, ...(before ? { before } : {}) },
+        retries: 2
+    }).catch(() => null);
+
+    if (!res?.body?.length) return [];
+
+    const messages = res.body as any[];
+    for (const msg of messages) {
+        MessageStore.getMessages(channelId).receiveMessage(msg);
+    }
+
+    if (messages.length === 100) {
+        const lastId = messages[messages.length - 1].id;
+        const more = await fetchAllMessages(channelId, lastId);
+        return [...messages, ...more];
+    }
+
+    return messages;
+}
+
+function queueDelete(channelId: string, msgId: string): Promise<void> {
+    return new Promise(resolve => {
+        deleteQueue.push(async () => {
+            if (settings.store.antiLog) {
+                FluxDispatcher.dispatch({
+                    type: "MESSAGE_DELETE",
+                    channelId,
+                    id: msgId,
+                    mlDeleted: true
+                });
+                await sleep(50);
+            }
+
+            try {
+                await MessageActions.deleteMessage(channelId, msgId);
+            } catch (e: any) {
+                if (e?.status === 429) {
+                    const retryAfter = (e?.body?.retry_after ?? 1) * 1000;
+                    await sleep(retryAfter);
+                    deleteQueue.unshift(async () => {
+                        await MessageActions.deleteMessage(channelId, msgId);
+                    });
+                }
+            }
+            await sleep(DELETE_DELAY_MS);
+            resolve();
+        });
+    });
+}
+
+const UserContextPatch: NavContextMenuPatchCallback = (children, { user }: UserContextProps) => {
+    if (!user) return;
+
+    const dmChannelId = ChannelStore.getDMFromUserId(user.id);
+    if (!dmChannelId) return;
+
+    children.push(
+        <Menu.MenuItem
+            id="bhop-clear-dm"
+            label="Clear DM"
+            action={() => {
+                const antiLogActive = settings.store.antiLog;
+                Alerts.show({
+                    title: "Clear DM?",
+                    body: `This will delete all your messages with ${user.username}.${antiLogActive ? "\n\nAntiLog is enabled — deletions will be hidden from MessageLogger." : ""}`,
+                    confirmColor: "colorDanger" as any,
+                    confirmText: "Delete All",
+                    cancelText: "Cancel",
+                    onConfirm: async () => {
+                        const me = UserStore.getCurrentUser();
+                        showToast("Fetching messages...", Toasts.Type.CUSTOM);
+
+                        const messages = await fetchAllMessages(dmChannelId);
+                        const myMessages = messages.filter(m => m.author.id === me.id);
+
+                        if (!myMessages.length) {
+                            showToast("No messages to delete.", Toasts.Type.FAILURE);
+                            return;
+                        }
+
+                        showToast(`Deleting ${myMessages.length} messages...`, Toasts.Type.CUSTOM);
+
+                        for (const msg of myMessages) {
+                            await queueDelete(dmChannelId, msg.id);
+                        }
+
+                        showToast("DM cleared.", Toasts.Type.SUCCESS);
+                    }
+                });
+            }}
+        />
+    );
+};
+
+export default definePlugin({
+    name: "ClearDM",
+    description: "Clear your DM conversation with a user via right-click context menu.",
+    authors: [{ name: "Bhopcord", id: 0n }],
+    tags: ["Chat", "Utility", "Bhopcord"],
+    settings,
+    contextMenus: {
+        "user-context": UserContextPatch
+    }
+});
