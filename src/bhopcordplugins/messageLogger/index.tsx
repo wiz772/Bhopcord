@@ -454,15 +454,15 @@ export default definePlugin({
 
     flux: {
         MESSAGE_CREATE(msg: any) {
-            if (!msg.nonce || deletedMessagesCache.size === 0) return;
+            if (!msg.nonce) return;
 
             const nonce = String(msg.nonce);
             const entry = deletedMessagesCache.get(nonce);
             if (!entry || entry.channelId !== msg.channel_id) return;
 
-            const channelCache = MessageCache.getOrCreate(entry.channelId);
             storeDeletedMessage(entry.channelId, nonce, entry.content);
 
+            const channelCache = MessageCache.getOrCreate(entry.channelId);
             if (channelCache.has(nonce)) {
                 const updated = channelCache.update(nonce, m =>
                     m.set("antiLogTechniques", [
@@ -599,12 +599,6 @@ export default definePlugin({
 
     renderDeletedContent: ErrorBoundary.wrap(
         ({ message: { id: messageId, channel_id: channelId } }: { message: Message }) => {
-            const message = useStateFromStores(
-                [MessageStore],
-                () => MessageStore.getMessage(channelId, messageId) as MLMessage,
-            );
-            if (!message?.deleted) return null;
-
             const stored = getStoredDeletedMessage(channelId, messageId);
             if (!stored) return null;
 
@@ -806,6 +800,7 @@ export default definePlugin({
                         let cache = $2.getOrCreate($1.channelId);
                         cache = $self.handleDelete(cache, $1, false);
                         $2.commit(cache);
+                        MessageStore.emitChange();
                         return;
                     `
                 },
@@ -815,6 +810,7 @@ export default definePlugin({
                         let cache = $2.getOrCreate($1.channelId);
                         cache = $self.handleDelete(cache, $1, true);
                         $2.commit(cache);
+                        MessageStore.emitChange();
                         return;
                     `
                 },
@@ -916,7 +912,7 @@ export default definePlugin({
             replacement: {
                 match: /\]:\i.isUnsupported.{0,20}?,children:\[/,
                 replace: "$&arguments[0]?.message?.editHistory?.length>0&&$self.renderEdits(arguments[0])," +
-                         "arguments[0]?.message?.deleted&&$self.renderDeletedContent(arguments[0]),"
+                         "$self.renderDeletedContent(arguments[0]),"
             }
         },
 
