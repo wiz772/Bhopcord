@@ -2,6 +2,15 @@
     display: none;
 }
 
+.messagelogger-deleted [class*="messageContent"] {
+    display: none;
+}
+
+.messagelogger-deleted-content {
+    display: block;
+    padding: 2px 0;
+}
+
 .messagelogger-deleted :is(.messagelogger-deleted-attachment,
     .emoji,
     [data-type="sticker"],

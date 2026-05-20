@@ -30,24 +30,25 @@ interface MLMessage extends Message {
     antiLogTechniques?: string[];
 }
 
+interface DeletedMessageData {
+    content: string;
+    authorId: string;
+    authorName: string;
+    timestamp: Date;
+}
+
 const MessageClasses = findCssClassesLazy("edited", "communicationDisabled", "isSystemMessage");
 
 const disabledDiffMessages = new Set<string>();
+const deletedContentStore = new Map<string, DeletedMessageData>();
+const messageCache = new Map<string, DeletedMessageData>();
 
-const deletedMessagesCache = new Map<string, { content: string; channelId: string; }>();
-
-function cacheDeletedMessage(id: string, content: string, channelId: string) {
-    const entry = { content, channelId };
-    deletedMessagesCache.set(id, entry);
-    setTimeout(() => {
-        if (deletedMessagesCache.get(id) === entry)
-            deletedMessagesCache.delete(id);
-    }, 5000);
+function storeKey(channelId: string, messageId: string): string {
+    return `${channelId}:${messageId}`;
 }
 
-function scheduleMicrotask(fn: () => void) {
-    if (typeof queueMicrotask === "function") queueMicrotask(fn);
-    else setTimeout(fn, 0);
+function getStoredDeletedMessage(channelId: string, messageId: string): DeletedMessageData | undefined {
+    return deletedContentStore.get(storeKey(channelId, messageId));
 }
 
 function addDeleteStyle() {
@@ -188,13 +189,20 @@ function applyAggregatedCustomContent(message: Message, key: string, nodes: Reac
     (message as any).__messageloggerLastAppliedKey = key;
     (message as any).customRenderedContent = payload;
 
-    scheduleMicrotask(() => {
+    if (typeof queueMicrotask === "function") queueMicrotask(() => {
         if ((message as any).__messageloggerLastAppliedKey !== key) return;
         (message as any).customRenderedContent = payload;
         if (shouldCommit) {
             updateMessage(message.channel_id, message.id, { customRenderedContent: payload });
         }
     });
+    else setTimeout(() => {
+        if ((message as any).__messageloggerLastAppliedKey !== key) return;
+        (message as any).customRenderedContent = payload;
+        if (shouldCommit) {
+            updateMessage(message.channel_id, message.id, { customRenderedContent: payload });
+        }
+    }, 0);
 }
 
 function clearCustomRenderedContent(message: Message) {
@@ -205,13 +213,20 @@ function clearCustomRenderedContent(message: Message) {
     delete (message as any).__messageloggerLastAppliedKey;
     delete (message as any).customRenderedContent;
 
-    scheduleMicrotask(() => {
+    if (typeof queueMicrotask === "function") queueMicrotask(() => {
         const current = (message as any).customRenderedContent;
         if (current?.__messageloggerDiff) return;
         const currentKey = (message as any).__messageloggerLastAppliedKey;
         if (typeof currentKey === "string" && currentKey !== lastKey) return;
         updateMessage(message.channel_id, message.id, { customRenderedContent: null });
     });
+    else setTimeout(() => {
+        const current = (message as any).customRenderedContent;
+        if (current?.__messageloggerDiff) return;
+        const currentKey = (message as any).__messageloggerLastAppliedKey;
+        if (typeof currentKey === "string" && currentKey !== lastKey) return;
+        updateMessage(message.channel_id, message.id, { customRenderedContent: null });
+    }, 0);
 }
 
 function createDiffSegment(part: DiffPart, message: Message, key: React.Key, highlightType?: "removed" | "added") {
@@ -418,7 +433,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "MessageLoggerBhopcord",
-    description: "Logs deleted/edited messages + détecte les techniques anti-log (mlDeleted, édition rapide, contenu vidé).",
+    description: "Logs deleted/edited messages + cache anti-log bypass (MESSAGE_CREATE store, renderDeletedContent).",
     tags: ["Chat", "Utility", "Bhopcord"],
     authors: [{ name: "Bhopcord", id: 0n }],
     dependencies: ["MessageUpdaterAPI"],
@@ -433,35 +448,16 @@ export default definePlugin({
     },
 
     flux: {
-        MESSAGE_CREATE(msg: any) {
-            if (!msg.nonce || deletedMessagesCache.size === 0) return;
-
-            const nonce = String(msg.nonce);
-            const entry = deletedMessagesCache.get(nonce);
-            if (!entry || entry.channelId !== msg.channel_id) return;
-
-            const channelCache = MessageCache.getOrCreate(entry.channelId);
-            if (channelCache.has(nonce)) {
-                const updated = channelCache.update(nonce, m =>
-                    m.set("content", entry.content)
-                     .set("antiLogTechniques", [
-                         ...(m.antiLogTechniques || []),
-                         "AntiLog: remplacement par nonce"
-                     ])
-                );
-                MessageCache.commit(updated);
-                MessageStore.emitChange();
-            }
-
-            FluxDispatcher.dispatch({
-                type: "MESSAGE_DELETE",
-                channelId: msg.channel_id,
-                id: msg.id,
-                mlDeleted: true,
+        MESSAGE_CREATE({ message }: { message: any; }) {
+            if (!message?.id || !message?.channel_id) return;
+            if (message.author?.bot) return;
+            messageCache.set(storeKey(message.channel_id, message.id), {
+                content: message.content ?? "",
+                authorId: message.author?.id ?? "",
+                authorName: message.author?.username ?? message.author?.globalName ?? "",
+                timestamp: message.timestamp,
             });
-
-            deletedMessagesCache.delete(nonce);
-        }
+        },
     },
 
     start() {
@@ -576,6 +572,30 @@ export default definePlugin({
             );
         }, { noop: true }),
 
+    renderDeletedContent: ErrorBoundary.wrap(
+        ({ message: { id: messageId, channel_id: channelId } }: { message: Message }) => {
+            const stored = getStoredDeletedMessage(channelId, messageId);
+            if (!stored) return null;
+
+            return (
+                <div className="messagelogger-deleted-content">
+                    {stored.authorName && (
+                        <span className="messagelogger-deleted-author">{stored.authorName}: </span>
+                    )}
+                    {Parser.parse(stored.content, true, {
+                        channelId,
+                        messageId,
+                        allowLinks: true,
+                        allowHeading: true,
+                        allowList: true,
+                        allowEmojiLinks: true,
+                        viewingChannelId: SelectedChannelStore.getChannelId(),
+                    })}
+                </div>
+            );
+        }, { noop: true },
+    ),
+
     makeEdit(newMessage: any, oldMessage: any): any {
         return {
             timestamp: new Date(newMessage.edited_timestamp),
@@ -631,42 +651,39 @@ export default definePlugin({
                 if (msg.deleted && !data.fromClearHistory) return;
 
                 if (data.fromClearHistory) {
+                    deletedContentStore.delete(storeKey(msg.channel_id, id));
                     cache = cache.remove(id);
                     return;
                 }
 
                 const EPHEMERAL = 64;
-                const isMlDeleted = data.mlDeleted;
-                const shouldIgnore = !isMlDeleted && (
+                const shouldIgnore = !data.mlDeleted && (
                     (msg.flags & EPHEMERAL) === EPHEMERAL ||
                     this.shouldIgnore(msg)
                 );
 
-                if (isMlDeleted) {
-                    const techniques = this.detectAntiLogTechniques(msg);
-                    techniques.unshift("mlDeleted");
-                    const restoredContent = msg.editHistory?.[0]?.content ?? msg.content;
-                    cache = cache.update(id, m =>
-                        m.set("deleted", true)
-                         .set("antiLogTechniques", techniques)
-                         .set("content", restoredContent)
-                         .set("attachments", m.attachments.map(a => ((a.deleted = true), a))),
-                    );
-                    cacheDeletedMessage(id, restoredContent, msg.channel_id);
-                } else if (shouldIgnore) {
+                const techniques = this.detectAntiLogTechniques(msg);
+
+                const cached = messageCache.get(storeKey(msg.channel_id, id));
+                const restoredContent = cached?.content ?? msg.editHistory?.[0]?.content ?? msg.content;
+
+                deletedContentStore.set(storeKey(msg.channel_id, id), {
+                    content: restoredContent,
+                    authorId: cached?.authorId ?? msg.author?.id ?? "",
+                    authorName: cached?.authorName ?? msg.author?.username ?? msg.author?.globalName ?? "",
+                    timestamp: cached?.timestamp ?? msg.timestamp,
+                });
+
+                if (shouldIgnore) {
                     cache = cache.remove(id);
-                } else {
-                    const techniques = this.detectAntiLogTechniques(msg);
-                    const originalContent = techniques.length > 0 ? msg.editHistory?.[0]?.content : undefined;
-                    const restoredContent = originalContent ?? msg.content;
-                    cache = cache.update(id, m =>
-                        m.set("deleted", true)
-                         .set("antiLogTechniques", techniques.length ? techniques : undefined)
-                         .set("content", restoredContent)
-                         .set("attachments", m.attachments.map(a => ((a.deleted = true), a))),
-                    );
-                    cacheDeletedMessage(id, restoredContent, msg.channel_id);
+                    return;
                 }
+
+                cache = cache.update(id, m =>
+                    m.set("deleted", true)
+                     .set("antiLogTechniques", techniques.length ? techniques : undefined)
+                     .set("attachments", m.attachments.map(a => ((a.deleted = true), a))),
+                );
             };
 
             if (isBulk) {
@@ -759,6 +776,7 @@ export default definePlugin({
                         let cache = $2.getOrCreate($1.channelId);
                         cache = $self.handleDelete(cache, $1, false);
                         $2.commit(cache);
+                        MessageStore.emitChange();
                         return;
                     `
                 },
@@ -768,6 +786,7 @@ export default definePlugin({
                         let cache = $2.getOrCreate($1.channelId);
                         cache = $self.handleDelete(cache, $1, true);
                         $2.commit(cache);
+                        MessageStore.emitChange();
                         return;
                     `
                 },
@@ -868,7 +887,8 @@ export default definePlugin({
             find: ".SEND_FAILED,",
             replacement: {
                 match: /\]:\i.isUnsupported.{0,20}?,children:\[/,
-                replace: "$&arguments[0]?.message?.editHistory?.length>0&&$self.renderEdits(arguments[0]),"
+                replace: "$&arguments[0]?.message?.editHistory?.length>0&&$self.renderEdits(arguments[0])," +
+                         "$self.renderDeletedContent(arguments[0]),"
             }
         },
 
