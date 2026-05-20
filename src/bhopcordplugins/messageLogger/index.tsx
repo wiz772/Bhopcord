@@ -15,7 +15,7 @@ import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { findCssClassesLazy } from "@webpack";
-import { ChannelStore, FluxDispatcher, Menu, MessageCache, MessageStore, Parser, SelectedChannelStore, Timestamp, UserStore, useStateFromStores } from "@webpack/common";
+import { ChannelStore, FluxDispatcher, Menu, MessageStore, Parser, SelectedChannelStore, Timestamp, UserStore, useStateFromStores } from "@webpack/common";
 
 import overlayStyle from "./deleteStyleOverlay.css?managed";
 import textStyle from "./deleteStyleText.css?managed";
@@ -27,7 +27,6 @@ interface MLMessage extends Message {
     editHistory?: { timestamp: Date; content: string; }[];
     firstEditTimestamp?: Date;
     diffViewDisabled?: boolean;
-    antiLogTechniques?: string[];
 }
 
 interface DeletedMessageData {
@@ -433,7 +432,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "MessageLoggerBhopcord",
-    description: "Logs deleted/edited messages + cache anti-log bypass (MESSAGE_CREATE store, renderDeletedContent).",
+    description: "Logs les messages supprimés/édités avec cache indépendant.",
     tags: ["Chat", "Utility", "Bhopcord"],
     authors: [{ name: "Bhopcord", id: 0n }],
     dependencies: ["MessageUpdaterAPI"],
@@ -603,39 +602,6 @@ export default definePlugin({
         };
     },
 
-    isInvisibleContent(content: string): boolean {
-        if (!content || content.trim() === "") return true;
-        const stripped = content.replace(/[\u200B-\u200D\uFEFF\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u200E\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u206F\u2800\u3164\uFFA0]/g, "");
-        return stripped.trim() === "";
-    },
-
-    detectAntiLogTechniques(msg: any): string[] {
-        const techniques: string[] = [];
-
-        const editHistory = msg.editHistory as { timestamp: Date; content: string; }[] | undefined;
-        if (editHistory?.length) {
-            const lastEdit = editHistory[editHistory.length - 1];
-            const timeSinceEdit = Date.now() - new Date(lastEdit.timestamp).getTime();
-
-            if (timeSinceEdit < 3000) {
-                techniques.push("Édition rapide avant suppression");
-            }
-
-            if (editHistory.length >= 4) {
-                const window = Date.now() - new Date(editHistory[0].timestamp).getTime();
-                if (window < 5000) {
-                    techniques.push("Spam d'éditions");
-                }
-            }
-        }
-
-        if (this.isInvisibleContent(msg.content)) {
-            techniques.push("Contenu vidé/invisible");
-        }
-
-        return techniques;
-    },
-
     handleDelete(
         cache: any,
         data: { ids: string[]; id: string; mlDeleted?: boolean; fromClearHistory?: boolean; },
@@ -657,12 +623,7 @@ export default definePlugin({
                 }
 
                 const EPHEMERAL = 64;
-                const shouldIgnore = !data.mlDeleted && (
-                    (msg.flags & EPHEMERAL) === EPHEMERAL ||
-                    this.shouldIgnore(msg)
-                );
-
-                const techniques = this.detectAntiLogTechniques(msg);
+                const shouldIgnore = (msg.flags & EPHEMERAL) === EPHEMERAL || this.shouldIgnore(msg);
 
                 const cached = messageCache.get(storeKey(msg.channel_id, id));
                 const restoredContent = cached?.content ?? msg.editHistory?.[0]?.content ?? msg.content;
@@ -681,7 +642,6 @@ export default definePlugin({
 
                 cache = cache.update(id, m =>
                     m.set("deleted", true)
-                     .set("antiLogTechniques", techniques.length ? techniques : undefined)
                      .set("attachments", m.attachments.map(a => ((a.deleted = true), a))),
                 );
             };
@@ -820,8 +780,7 @@ export default definePlugin({
                         "this.deleted = $1.deleted || false," +
                         "this.editHistory = $1.editHistory || []," +
                         "this.firstEditTimestamp = $1.firstEditTimestamp || this.editedTimestamp || this.timestamp," +
-                        "this.diffViewDisabled = $1.diffViewDisabled || false," +
-                        "this.antiLogTechniques = $1.antiLogTechniques || [],",
+                        "this.diffViewDisabled = $1.diffViewDisabled || false,",
                 },
             ],
         },
@@ -833,7 +792,7 @@ export default definePlugin({
                     match:
                         /(?<=null!=\i\.edited_timestamp\)return )\i\(\i,\{reactions:(\i)\.reactions.{0,50}\}\)/,
                     replace:
-                        "Object.assign($&,{ deleted:$1.deleted, editHistory:$1.editHistory, firstEditTimestamp:$1.firstEditTimestamp, diffViewDisabled:$1.diffViewDisabled, antiLogTechniques:$1.antiLogTechniques })",
+                        "Object.assign($&,{ deleted:$1.deleted, editHistory:$1.editHistory, firstEditTimestamp:$1.firstEditTimestamp, diffViewDisabled:$1.diffViewDisabled })",
                 },
 
                 {
@@ -852,8 +811,7 @@ export default definePlugin({
                         "deleted: arguments[1]?.deleted," +
                         "editHistory: arguments[1]?.editHistory," +
                         "firstEditTimestamp: new Date(arguments[1]?.firstEditTimestamp ?? $2.editedTimestamp ?? $2.timestamp)," +
-"diffViewDisabled: arguments[1]?.diffViewDisabled," +
-"antiLogTechniques: arguments[1]?.antiLogTechniques,",
+"diffViewDisabled: arguments[1]?.diffViewDisabled,",
                 },
                 {
                     match: /(\((\i)\){return null==\2\.attachments.+?)spoiler:/,
@@ -878,7 +836,7 @@ export default definePlugin({
                 {
                     match: /\)\("li",\{(.+?),className:/,
                     replace:
-                        ')("li",{$1,className:(arguments[0].message.deleted ? "messagelogger-deleted " : "")+(arguments[0].message.antiLogTechniques?.length ? "messagelogger-anti-log " : "")+',
+                        ')("li",{$1,className:(arguments[0].message.deleted ? "messagelogger-deleted " : "")+',
                 },
             ],
         },
