@@ -41,6 +41,7 @@ const MessageClasses = findCssClassesLazy("edited", "communicationDisabled", "is
 const disabledDiffMessages = new Set<string>();
 const deletedContentStore = new Map<string, DeletedMessageData>();
 const messageCache = new Map<string, DeletedMessageData>();
+const nonceIndex = new Map<string, string>(); // nonce → "channelId:messageId"
 
 function storeKey(channelId: string, messageId: string): string {
     return `${channelId}:${messageId}`;
@@ -450,7 +451,27 @@ export default definePlugin({
         MESSAGE_CREATE({ message }: { message: any; }) {
             if (!message?.id || !message?.channel_id) return;
             if (message.author?.bot) return;
-            messageCache.set(storeKey(message.channel_id, message.id), {
+
+            const key = storeKey(message.channel_id, message.id);
+
+            if (message.nonce) {
+                const nonce = String(message.nonce);
+                const existing = nonceIndex.get(nonce);
+
+                if (existing) {
+                    const [existingChan] = existing.split(":");
+                    if (existingChan === message.channel_id) {
+                        return;
+                    }
+                }
+
+                const channel = ChannelStore.getChannel(message.channel_id);
+                if (channel?.type === 1 || channel?.type === 3) {
+                    nonceIndex.set(nonce, key);
+                }
+            }
+
+            messageCache.set(key, {
                 content: message.content ?? "",
                 authorId: message.author?.id ?? "",
                 authorName: message.author?.username ?? message.author?.globalName ?? "",
