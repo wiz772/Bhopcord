@@ -1,0 +1,11 @@
+.vc-stereo-wrap {
+    display: flex;
+    justify-content: center;
+    margin-top: 8px;
+    margin-bottom: 4px;
+}
+
+.vc-stereo-btn.vc-stereo-active {
+    color: var(--status-positive);
+    background-color: color-mix(in srgb, var(--status-positive) 18%, transparent);
+}
