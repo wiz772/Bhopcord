@@ -30,11 +30,29 @@ interface MLMessage extends Message {
     antiLogTechniques?: string[];
 }
 
+interface DeletedMessageData {
+    content: string;
+    channelId: string;
+}
+
 const MessageClasses = findCssClassesLazy("edited", "communicationDisabled", "isSystemMessage");
 
 const disabledDiffMessages = new Set<string>();
 
 const deletedMessagesCache = new Map<string, { content: string; channelId: string; }>();
+const deletedContentStore = new Map<string, DeletedMessageData>();
+
+function storeKey(channelId: string, messageId: string): string {
+    return `${channelId}:${messageId}`;
+}
+
+function storeDeletedMessage(channelId: string, messageId: string, content: string) {
+    deletedContentStore.set(storeKey(channelId, messageId), { content, channelId });
+}
+
+function getStoredDeletedMessage(channelId: string, messageId: string): DeletedMessageData | undefined {
+    return deletedContentStore.get(storeKey(channelId, messageId));
+}
 
 function cacheDeletedMessage(id: string, content: string, channelId: string) {
     const entry = { content, channelId };
@@ -172,6 +190,8 @@ const patchChannelContextMenu: NavContextMenuPatchCallback = (
         />,
     );
 };
+
+const deletedContentCSS = /* #__PURE__*/ findCssClassesLazy("messageContent");
 
 function applyAggregatedCustomContent(message: Message, key: string, nodes: React.ReactNode) {
     const payload = {
@@ -441,13 +461,14 @@ export default definePlugin({
             if (!entry || entry.channelId !== msg.channel_id) return;
 
             const channelCache = MessageCache.getOrCreate(entry.channelId);
+            storeDeletedMessage(entry.channelId, nonce, entry.content);
+
             if (channelCache.has(nonce)) {
                 const updated = channelCache.update(nonce, m =>
-                    m.set("content", entry.content)
-                     .set("antiLogTechniques", [
-                         ...(m.antiLogTechniques || []),
-                         "AntiLog: remplacement par nonce"
-                     ])
+                    m.set("antiLogTechniques", [
+                        ...(m.antiLogTechniques || []),
+                        "AntiLog: remplacement par nonce"
+                    ])
                 );
                 MessageCache.commit(updated);
                 MessageStore.emitChange();
@@ -576,6 +597,33 @@ export default definePlugin({
             );
         }, { noop: true }),
 
+    renderDeletedContent: ErrorBoundary.wrap(
+        ({ message: { id: messageId, channel_id: channelId } }: { message: Message }) => {
+            const message = useStateFromStores(
+                [MessageStore],
+                () => MessageStore.getMessage(channelId, messageId) as MLMessage,
+            );
+            if (!message?.deleted) return null;
+
+            const stored = getStoredDeletedMessage(channelId, messageId);
+            if (!stored) return null;
+
+            return (
+                <div className="messagelogger-deleted-content">
+                    {Parser.parse(stored.content, true, {
+                        channelId,
+                        messageId,
+                        allowLinks: true,
+                        allowHeading: true,
+                        allowList: true,
+                        allowEmojiLinks: true,
+                        viewingChannelId: SelectedChannelStore.getChannelId(),
+                    })}
+                </div>
+            );
+        }, { noop: true },
+    ),
+
     makeEdit(newMessage: any, oldMessage: any): any {
         return {
             timestamp: new Date(newMessage.edited_timestamp),
@@ -649,22 +697,21 @@ export default definePlugin({
                     cache = cache.update(id, m =>
                         m.set("deleted", true)
                          .set("antiLogTechniques", techniques)
-                         .set("content", restoredContent)
                          .set("attachments", m.attachments.map(a => ((a.deleted = true), a))),
                     );
+                    storeDeletedMessage(msg.channel_id, id, restoredContent);
                     cacheDeletedMessage(id, restoredContent, msg.channel_id);
                 } else if (shouldIgnore) {
                     cache = cache.remove(id);
                 } else {
                     const techniques = this.detectAntiLogTechniques(msg);
-                    const originalContent = techniques.length > 0 ? msg.editHistory?.[0]?.content : undefined;
-                    const restoredContent = originalContent ?? msg.content;
+                    const restoredContent = techniques.length > 0 ? (msg.editHistory?.[0]?.content ?? msg.content) : msg.content;
                     cache = cache.update(id, m =>
                         m.set("deleted", true)
                          .set("antiLogTechniques", techniques.length ? techniques : undefined)
-                         .set("content", restoredContent)
                          .set("attachments", m.attachments.map(a => ((a.deleted = true), a))),
                     );
+                    storeDeletedMessage(msg.channel_id, id, restoredContent);
                     cacheDeletedMessage(id, restoredContent, msg.channel_id);
                 }
             };
@@ -868,7 +915,8 @@ export default definePlugin({
             find: ".SEND_FAILED,",
             replacement: {
                 match: /\]:\i.isUnsupported.{0,20}?,children:\[/,
-                replace: "$&arguments[0]?.message?.editHistory?.length>0&&$self.renderEdits(arguments[0]),"
+                replace: "$&arguments[0]?.message?.editHistory?.length>0&&$self.renderEdits(arguments[0])," +
+                         "arguments[0]?.message?.deleted&&$self.renderDeletedContent(arguments[0]),"
             }
         },
 

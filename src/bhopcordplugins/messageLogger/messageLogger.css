@@ -120,6 +120,14 @@
     border-left: 3px solid var(--status-warning, #faa81a) !important;
 }
 
+.messagelogger-deleted [class*="messageContent"] {
+    display: none;
+}
+
+.messagelogger-deleted-content {
+    padding: 2px 0;
+}
+
 .theme-dark .messagelogger-anti-log {
     background-color: rgba(250, 168, 26, 0.08) !important;
 }
