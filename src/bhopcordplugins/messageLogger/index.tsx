@@ -334,6 +334,15 @@ export default definePlugin({
         );
     },
 
+    AntiLogBadge({ message }: { message: any; }) {
+        if (!message?.antiLog?.length) return null;
+        return (
+            <span className="messagelogger-antilog-badge">
+                [DETECTED: ANTI-LOG]
+            </span>
+        );
+    },
+
     DELETED_MESSAGE_COUNT: () => ({
         ast: [[
             6,
@@ -486,10 +495,16 @@ export default definePlugin({
 
         {
             find: ".SEND_FAILED,",
-            replacement: {
-                match: /\]:\i.isUnsupported.{0,20}?,children:\[/,
-                replace: "$&arguments[0]?.message?.editHistory?.length>0&&$self.renderEdits(arguments[0]),"
-            }
+            replacement: [
+                {
+                    match: /\]:\i.isUnsupported.{0,20}?,children:\[/,
+                    replace: "$&arguments[0]?.message?.editHistory?.length>0&&$self.renderEdits(arguments[0]),"
+                },
+                {
+                    match: /\]:\i.isUnsupported.{0,20}?,children:\[/,
+                    replace: "$&arguments[0]?.message?.antiLog?.length>0&&$self.AntiLogBadge(arguments[0]),"
+                }
+            ]
         },
 
         {

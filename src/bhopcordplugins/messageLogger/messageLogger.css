@@ -55,3 +55,10 @@
     font-size: 0.75em;
     font-weight: 600;
 }
+
+.messagelogger-antilog-badge {
+    color: #f0c040;
+    font-size: 0.75em;
+    font-weight: 600;
+    margin-left: 4px;
+}
