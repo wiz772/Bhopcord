@@ -44,7 +44,7 @@ import { PluginMeta } from "~plugins";
 
 import { OptionComponentMap } from "./components";
 import { openContributorModal } from "./ContributorModal";
-import { GithubButton, WebsiteButton } from "./LinkIconButton";
+import { GithubButton } from "./LinkIconButton";
 
 const cl = classNameFactory("vc-plugin-modal-");
 
@@ -174,7 +174,6 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
     }
 
     const pluginMeta = PluginMeta[plugin.name];
-    const isBhopcordPlugin = pluginMeta.folderName.startsWith("src/bhopcordplugins/") ?? false;
     const isEquicordPlugin = pluginMeta.folderName.startsWith("src/equicordplugins/") ?? false;
 
     return (
@@ -250,12 +249,8 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
                                 )}
                             </Tooltip>
                         ) : <div />}
-                        {!pluginMeta.userPlugin && !isBhopcordPlugin && (
+                        {!pluginMeta.userPlugin && (
                             <div className={cl("links")}>
-                                <WebsiteButton
-                                    text="Website"
-                                    href={isEquicordPlugin ? `https://equicord.org/plugins/${plugin.name}` : `https://vencord.dev/plugins/${plugin.name}`}
-                                />
                                 <GithubButton
                                     text="Source Code"
                                     href={`https://github.com/${gitRemote}/tree/main/${pluginMeta.folderName}`}
