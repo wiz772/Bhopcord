@@ -193,7 +193,13 @@ export default function PluginSettings() {
     }, []);
 
     const sortedPlugins = useMemo(() => Object.values(Plugins)
-        .sort((a, b) => a.name.localeCompare(b.name)), []);
+        .sort((a, b) => {
+            const aIsBhopcord = PluginMeta[a.name]?.folderName.startsWith("src/bhopcordplugins/");
+            const bIsBhopcord = PluginMeta[b.name]?.folderName.startsWith("src/bhopcordplugins/");
+            if (aIsBhopcord && !bIsBhopcord) return -1;
+            if (!aIsBhopcord && bIsBhopcord) return 1;
+            return a.name.localeCompare(b.name);
+        }), []);
 
     const hasUserPlugins = useMemo(() => !IS_STANDALONE && Object.values(PluginMeta).some(m => m.userPlugin), []);
 
