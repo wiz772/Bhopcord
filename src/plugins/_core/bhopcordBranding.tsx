@@ -11,6 +11,16 @@ import { React } from "@webpack/common";
 
 let observer: MutationObserver | undefined;
 
+function applyLogoInline(home: Element) {
+    const wrapper = home.querySelector<HTMLElement>('[class*="childWrapper"]');
+    if (wrapper) {
+        wrapper.style.setProperty("background-image", `url(${BHOPCORD_LOGO_SRC})`, "important");
+        wrapper.style.setProperty("background-size", "cover", "important");
+        wrapper.style.setProperty("background-position", "center", "important");
+        wrapper.style.setProperty("background-repeat", "no-repeat", "important");
+    }
+}
+
 function markHomeButton() {
     document.documentElement.style.setProperty("--vc-bhopcord-logo", `url(${BHOPCORD_LOGO_SRC})`);
 
@@ -23,16 +33,21 @@ function markHomeButton() {
             ?? nav.querySelector('a[href*="/channels/@me"]')?.parentElement
             ?? nav.firstElementChild;
 
-        if (!home || home.classList.contains("vc-bhopcord-home-target")) continue;
+        if (!home) continue;
 
         home.classList.add("vc-bhopcord-home-target");
+        applyLogoInline(home);
     }
+}
+
+function onDomChange() {
+    markHomeButton();
 }
 
 export default definePlugin({
     name: "BhopcordBranding",
     description: "Core Bhopcord branding (home button logo).",
-    authors: [{ name: "Bhopcord", id: 0n }],
+    authors: [{ name: "bhoppeur", id: 1500726636394315866n }],
     required: true,
     hidden: true,
 
@@ -73,7 +88,7 @@ export default definePlugin({
 
     start() {
         markHomeButton();
-        observer = new MutationObserver(() => markHomeButton());
+        observer = new MutationObserver(onDomChange);
         observer.observe(document.body, { childList: true, subtree: true });
     },
 
@@ -83,6 +98,13 @@ export default definePlugin({
         document.documentElement.style.removeProperty("--vc-bhopcord-logo");
         document.querySelectorAll(".vc-bhopcord-home-target").forEach(el => {
             el.classList.remove("vc-bhopcord-home-target");
+            const wrapper = el.querySelector<HTMLElement>('[class*="childWrapper"]');
+            if (wrapper) {
+                wrapper.style.removeProperty("background-image");
+                wrapper.style.removeProperty("background-size");
+                wrapper.style.removeProperty("background-position");
+                wrapper.style.removeProperty("background-repeat");
+            }
         });
     }
 });
