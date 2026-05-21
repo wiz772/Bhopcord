@@ -27,8 +27,6 @@ interface MLMessage extends Message {
 
 const MessageClasses = findCssClassesLazy("edited", "communicationDisabled", "isSystemMessage");
 
-const deferredMlDeleted = new Set<string>();
-
 export const settings = definePluginSettings({
     deleteStyle: {
         type: OptionType.SELECT,
@@ -240,44 +238,18 @@ export default definePlugin({
         };
     },
 
-    handleDelete(cache: any, data: { ids: string[], id: string; mlDeleted?: boolean; __cleanup?: boolean; }, isBulk: boolean) {
+    handleDelete(cache: any, data: { ids: string[], id: string; mlDeleted?: boolean; }, isBulk: boolean) {
         try {
             if (cache == null || (!isBulk && !cache.has(data.id))) return cache;
 
             const mutate = (id: string) => {
-                const msg = cache.get(id);
-                if (!msg) return;
-
-                if (data.mlDeleted && data.__cleanup) {
-                    deferredMlDeleted.delete(id);
+                if (data.mlDeleted) {
                     cache = cache.remove(id);
                     return;
                 }
 
-                if (data.mlDeleted) {
-                    deferredMlDeleted.add(id);
-                    const cid = msg.channel_id;
-                    setTimeout(() => {
-                        deferredMlDeleted.delete(id);
-                        FluxDispatcher.dispatch({
-                            type: "MESSAGE_DELETE",
-                            channelId: cid,
-                            id,
-                            mlDeleted: true,
-                            __cleanup: true
-                        });
-                    }, 1500);
-                    return;
-                }
-
-                if (deferredMlDeleted.has(id)) {
-                    deferredMlDeleted.delete(id);
-                    cache = cache.update(id, m => m
-                        .set("deleted", true)
-                        .set("antiLog", ["nonce collision bypassed"])
-                        .set("attachments", m.attachments.map((a: any) => (a.deleted = true, a))));
-                    return;
-                }
+                const msg = cache.get(id);
+                if (!msg) return;
 
                 const EPHEMERAL = 64;
                 const shouldIgnore = (msg.flags & EPHEMERAL) === EPHEMERAL ||
@@ -412,8 +384,19 @@ export default definePlugin({
                     match: /(?<=MESSAGE_CREATE:function\((\i)\)\{)(?=.{0,200}(\i\.\i)\.getOrCreate)/,
                     replace: `
                         if ($1.message?.nonce) {
-                            var __mc = $2.getOrCreate($1.channelId);
-                            if (__mc.has($1.message.nonce)) {
+                            const __nonce = $1.message.nonce;
+                            const __mc = $2.getOrCreate($1.channelId);
+                            const __original = __mc.get(__nonce);
+                            const __isSuspiciousReplacement =
+                                __original &&
+                                __original.id === __nonce &&
+                                $1.message.author?.id === __original.author?.id &&
+                                (
+                                    !$1.message.content ||
+                                    $1.message.content === "x" ||
+                                    $1.message.content === "\\u17B5"
+                                );
+                            if (__isSuspiciousReplacement) {
                                 $1.message = Object.assign({}, $1.message, { nonce: void 0 });
                             }
                         }
