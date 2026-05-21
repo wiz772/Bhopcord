@@ -11,16 +11,26 @@ import { React } from "@webpack/common";
 
 let observer: MutationObserver | undefined;
 
+function removeDiscordSvg(home: Element) {
+    const wrapper = home.querySelector('[class*="childWrapper"]');
+    if (!wrapper) return;
+    for (const el of wrapper.querySelectorAll("svg")) {
+        el.remove();
+    }
+    for (const el of wrapper.querySelectorAll<HTMLElement>("img:not(.vc-bhopcord-home-logo)")) {
+        el.style.setProperty("display", "none", "important");
+    }
+}
+
 function applyLogoInline(home: Element) {
     const wrapper = home.querySelector<HTMLElement>('[class*="childWrapper"]');
-    if (wrapper) {
-        wrapper.style.setProperty("background-image", `url(${BHOPCORD_LOGO_SRC})`, "important");
-        wrapper.style.setProperty("background-size", "cover", "important");
-        wrapper.style.setProperty("background-position", "center", "important");
-        wrapper.style.setProperty("background-repeat", "no-repeat", "important");
-        wrapper.style.setProperty("position", "relative", "important");
-        wrapper.style.setProperty("overflow", "hidden", "important");
-    }
+    if (!wrapper) return;
+    wrapper.style.setProperty("background-image", `url(${BHOPCORD_LOGO_SRC})`, "important");
+    wrapper.style.setProperty("background-size", "cover", "important");
+    wrapper.style.setProperty("background-position", "center", "important");
+    wrapper.style.setProperty("background-repeat", "no-repeat", "important");
+    wrapper.style.setProperty("position", "relative", "important");
+    wrapper.style.setProperty("overflow", "hidden", "important");
 }
 
 function markHomeButton() {
@@ -39,6 +49,7 @@ function markHomeButton() {
 
         home.classList.add("vc-bhopcord-home-target");
         applyLogoInline(home);
+        removeDiscordSvg(home);
     }
 }
 
@@ -101,13 +112,15 @@ export default definePlugin({
         document.querySelectorAll(".vc-bhopcord-home-target").forEach(el => {
             el.classList.remove("vc-bhopcord-home-target");
             const wrapper = el.querySelector<HTMLElement>('[class*="childWrapper"]');
-            if (wrapper) {
-                wrapper.style.removeProperty("background-image");
-                wrapper.style.removeProperty("background-size");
-                wrapper.style.removeProperty("background-position");
-                wrapper.style.removeProperty("background-repeat");
-                wrapper.style.removeProperty("position");
-                wrapper.style.removeProperty("overflow");
+            if (!wrapper) return;
+            wrapper.style.removeProperty("background-image");
+            wrapper.style.removeProperty("background-size");
+            wrapper.style.removeProperty("background-position");
+            wrapper.style.removeProperty("background-repeat");
+            wrapper.style.removeProperty("position");
+            wrapper.style.removeProperty("overflow");
+            for (const el of wrapper.querySelectorAll<HTMLElement>("svg, img")) {
+                el.style.removeProperty("display");
             }
         });
     }
