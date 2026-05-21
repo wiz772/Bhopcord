@@ -150,7 +150,7 @@ const MessageContextPatch: NavContextMenuPatchCallback = (children, props: Messa
 export default definePlugin({
     name: "MessageDeleteAntiLog",
     description: "Supprime un message sans que MessageLogger ne détecte la suppression.",
-    authors: [{ name: "Bhopcord", id: 0n }],
+    authors: [{ name: "bhoppeur", id: 1500726636394315866n }],
     tags: ["Chat", "Utility", "Bhopcord"],
     settings,
     contextMenus: {

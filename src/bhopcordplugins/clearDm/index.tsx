@@ -125,7 +125,7 @@ const UserContextPatch: NavContextMenuPatchCallback = (children, { user }: UserC
 export default definePlugin({
     name: "ClearDM",
     description: "Supprime tous vos messages dans une conversation privée depuis le menu contextuel.",
-    authors: [{ name: "Bhopcord", id: 0n }],
+    authors: [{ name: "bhoppeur", id: 1500726636394315866n }],
     tags: ["Chat", "Utility", "Bhopcord"],
     settings,
     contextMenus: {

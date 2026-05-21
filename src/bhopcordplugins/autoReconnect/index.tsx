@@ -49,7 +49,7 @@ let originalSelectVoiceChannel: typeof ChannelActions.selectVoiceChannel;
 export default definePlugin({
     name: "AutoReconnect",
     description: "Bouton dans le panneau vocal pour se reconnecter automatiquement après une déconnexion.",
-    authors: [{ name: "Bhopcord", id: 0n }],
+    authors: [{ name: "bhoppeur", id: 1500726636394315866n }],
     tags: ["Voice", "Utility", "Bhopcord"],
     settings,
 

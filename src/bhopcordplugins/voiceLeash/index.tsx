@@ -175,7 +175,7 @@ export default definePlugin({
     name: "VoiceLeash",
     description: "Attachez des utilisateurs à votre salon vocal avec la permission MOVE_MEMBERS.",
     tags: ["Voice", "Moderation", "Bhopcord"],
-    authors: [{ name: "Bhopcord", id: 0n }],
+    authors: [{ name: "bhoppeur", id: 1500726636394315866n }],
     settings,
 
     contextMenus: {

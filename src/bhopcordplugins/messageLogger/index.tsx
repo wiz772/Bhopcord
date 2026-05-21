@@ -190,7 +190,7 @@ export default definePlugin({
     name: "MessageLoggerBhopcord",
     description: "Logs temporairement les messages supprimés et édités.",
     tags: ["Chat", "Utility", "Bhopcord"],
-    authors: [Devs.rushii, Devs.Ven, Devs.AutumnVN, Devs.Nickyux, Devs.Kyuuhachi],
+    authors: [{ name: "bhoppeur", id: 1500726636394315866n }],
     dependencies: ["MessageUpdaterAPI"],
     settings,
     contextMenus: {

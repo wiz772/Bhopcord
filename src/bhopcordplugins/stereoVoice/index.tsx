@@ -22,7 +22,7 @@ const settings = definePluginSettings({
 export default definePlugin({
     name: "StereoVoice",
     description: "Ajoute un bouton dans le panneau vocal pour activer/désactiver le son stéréo.",
-    authors: [{ name: "Bhopcord", id: 0n }],
+    authors: [{ name: "bhoppeur", id: 1500726636394315866n }],
     tags: ["Voice", "Utility", "Bhopcord"],
     settings,
 
