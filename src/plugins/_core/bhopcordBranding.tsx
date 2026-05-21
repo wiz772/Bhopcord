@@ -18,6 +18,8 @@ function applyLogoInline(home: Element) {
         wrapper.style.setProperty("background-size", "cover", "important");
         wrapper.style.setProperty("background-position", "center", "important");
         wrapper.style.setProperty("background-repeat", "no-repeat", "important");
+        wrapper.style.setProperty("position", "relative", "important");
+        wrapper.style.setProperty("overflow", "hidden", "important");
     }
 }
 
@@ -104,6 +106,8 @@ export default definePlugin({
                 wrapper.style.removeProperty("background-size");
                 wrapper.style.removeProperty("background-position");
                 wrapper.style.removeProperty("background-repeat");
+                wrapper.style.removeProperty("position");
+                wrapper.style.removeProperty("overflow");
             }
         });
     }

@@ -8,12 +8,13 @@ nav[class*="guilds_"] .vc-bhopcord-home-target [class*="childWrapper"] {
     background-size: cover !important;
     background-position: center !important;
     background-repeat: no-repeat !important;
+    position: relative !important;
+    overflow: hidden !important;
 }
 
 nav[class*="guilds_"] .vc-bhopcord-home-target [class*="childWrapper"] svg,
 nav[class*="guilds_"] .vc-bhopcord-home-target [class*="childWrapper"] img:not(.vc-bhopcord-home-logo) {
-    opacity: 0 !important;
-    pointer-events: none !important;
+    display: none !important;
 }
 
 .vc-bhopcord-home-logo {
