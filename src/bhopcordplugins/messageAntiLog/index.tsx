@@ -18,6 +18,11 @@ const settings = definePluginSettings({
         description: "Supprime en anti-log en double-cliquant sur vos messages",
         default: true
     },
+    shiftRequired: {
+        type: OptionType.BOOLEAN,
+        description: "Nécessite Shift+double-clic pour supprimer",
+        default: false
+    },
     emptyMessage: {
         type: OptionType.BOOLEAN,
         description: "Envoie un message vide de remplacement pour écraser le cache de MessageLogger",
@@ -167,6 +172,7 @@ export default definePlugin({
     onMessageClick(message: Message, channel: Channel, event: MouseEvent) {
         if (!settings.store.enabled || !settings.store.doubleClickDelete) return;
         if (event.detail !== 2) return;
+        if (settings.store.shiftRequired && !event.shiftKey) return;
 
         const me = UserStore.getCurrentUser();
         if (!me || message.author.id !== me.id) return;
