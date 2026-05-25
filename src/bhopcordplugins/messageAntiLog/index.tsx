@@ -4,12 +4,18 @@ import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/Co
 import { sleep } from "@utils/misc";
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
+import type { Channel, Message } from "@vencord/discord-types";
 import { FluxDispatcher, Menu, MessageActions, showToast, Toasts, UserStore } from "@webpack/common";
 
 const settings = definePluginSettings({
     enabled: {
         type: OptionType.BOOLEAN,
         description: "Active la suppression anti-log",
+        default: true
+    },
+    doubleClickDelete: {
+        type: OptionType.BOOLEAN,
+        description: "Supprime en anti-log en double-cliquant sur vos messages",
         default: true
     },
     emptyMessage: {
@@ -42,6 +48,48 @@ interface MessageContextProps {
     channel: {
         id: string;
     };
+}
+
+async function performAntiLogDelete(channelId: string, messageId: string) {
+    try {
+        FluxDispatcher.dispatch({
+            type: "MESSAGE_DELETE",
+            channelId,
+            id: messageId,
+            mlDeleted: true
+        });
+
+        await sleep(100);
+
+        let replacementId: string | null = null;
+        if (settings.store.emptyMessage) {
+            replacementId = await sendReplacementMessage(
+                channelId,
+                "\u17B5",
+                messageId
+            );
+        } else if (settings.store.blockMessage) {
+            replacementId = await sendReplacementMessage(
+                channelId,
+                settings.store.blockMessage,
+                messageId
+            );
+        }
+
+        await sleep(settings.store.deleteInterval);
+
+        MessageActions.deleteMessage(channelId, messageId);
+
+        if (replacementId) {
+            await sleep(settings.store.deleteInterval);
+            MessageActions.deleteMessage(channelId, replacementId);
+        }
+
+        showToast("Deleted with AntiLog", Toasts.Type.SUCCESS);
+    } catch (e) {
+        console.error("[MessageAntiLog] error:", e);
+        showToast("AntiLog deletion failed", Toasts.Type.FAILURE);
+    }
 }
 
 function sendReplacementMessage(channelId: string, content: string, nonce: string): Promise<string | null> {
@@ -102,47 +150,7 @@ const MessageContextPatch: NavContextMenuPatchCallback = (children, props: Messa
             id="bhop-antilog-delete"
             label="Delete (AntiLog)"
             color="danger"
-            action={async () => {
-                try {
-                    FluxDispatcher.dispatch({
-                        type: "MESSAGE_DELETE",
-                        channelId: channel.id,
-                        id: message.id,
-                        mlDeleted: true
-                    });
-
-                    await sleep(100);
-
-                    let replacementId: string | null = null;
-                    if (settings.store.emptyMessage) {
-                        replacementId = await sendReplacementMessage(
-                            channel.id,
-                            "\u17B5",
-                            message.id
-                        );
-                    } else if (settings.store.blockMessage) {
-                        replacementId = await sendReplacementMessage(
-                            channel.id,
-                            settings.store.blockMessage,
-                            message.id
-                        );
-                    }
-
-                    await sleep(settings.store.deleteInterval);
-
-                    MessageActions.deleteMessage(channel.id, message.id);
-
-                    if (replacementId) {
-                        await sleep(settings.store.deleteInterval);
-                        MessageActions.deleteMessage(channel.id, replacementId);
-                    }
-
-                    showToast("Deleted with AntiLog", Toasts.Type.SUCCESS);
-                } catch (e) {
-                    console.error("[MessageAntiLog] error:", e);
-                    showToast("AntiLog deletion failed", Toasts.Type.FAILURE);
-                }
-            }}
+            action={() => performAntiLogDelete(channel.id, message.id)}
         />
     );
 };
@@ -155,5 +163,16 @@ export default definePlugin({
     settings,
     contextMenus: {
         "message": MessageContextPatch
+    },
+    onMessageClick(message: Message, channel: Channel, event: MouseEvent) {
+        if (!settings.store.enabled || !settings.store.doubleClickDelete) return;
+        if (event.detail !== 2) return;
+
+        const me = UserStore.getCurrentUser();
+        if (!me || message.author.id !== me.id) return;
+        if ((message as any).deleted) return;
+        if ((message as any).state !== "SENT") return;
+
+        performAntiLogDelete(channel.id, message.id);
     }
 });
