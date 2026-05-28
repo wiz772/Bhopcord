@@ -1,116 +1,168 @@
-/*
- * Vencord, a Discord client mod
- * Copyright (c) 2025 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
 import { Notice } from "@components/Notice";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { Channel, User, VoiceState } from "@vencord/discord-types";
-import { findByPropsLazy, findStoreLazy } from "@webpack";
-import { Menu, React, VoiceStateStore } from "@webpack/common";
+import type { Channel, User, VoiceState } from "@vencord/discord-types";
+import { findByPropsLazy } from "@webpack";
+import { Menu, React, showToast, Toasts, UserStore, VoiceStateStore } from "@webpack/common";
 
-type TFollowedUserInfo = {
+interface FollowEntry {
     lastChannelId: string;
     userId: string;
-} | null;
-
-interface UserContextProps {
-    channel: Channel;
-    user: User;
-    guildId?: string;
 }
 
-let followedUserInfo: TFollowedUserInfo = null;
+const followedUsers = new Map<string, FollowEntry>();
 
 const voiceChannelAction = findByPropsLazy("selectVoiceChannel");
-const UserStore = findStoreLazy("UserStore");
-const RelationshipStore = findStoreLazy("RelationshipStore");
 
 const settings = definePluginSettings({
     onlyWhenInVoice: {
         type: OptionType.BOOLEAN,
         default: true,
-        description: "Only follow the user when you are in a voice channel"
+        description: "Only follow users when you are in a voice channel"
     },
     leaveWhenUserLeaves: {
         type: OptionType.BOOLEAN,
         default: false,
-        description: "Leave the voice channel when the user leaves. (That can cause you to sometimes enter infinite leave/join loop)"
+        description: "Leave the voice channel when all followed users leave"
     }
 });
 
-const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { channel, user }: UserContextProps) => {
-    if (UserStore.getCurrentUser().id === user.id || !RelationshipStore.getFriendIDs().includes(user.id)) return;
+interface UserContextProps {
+    channel?: Channel;
+    user: User;
+    guildId?: string;
+}
 
-    const [checked, setChecked] = React.useState(followedUserInfo?.userId === user.id);
+const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: UserContextProps) => {
+    if (!user || UserStore.getCurrentUser()?.id === user.id) return;
+
+    const [checked, setChecked] = React.useState(followedUsers.has(user.id));
 
     children.push(
         <Menu.MenuSeparator />,
         <Menu.MenuCheckboxItem
             id="fvu-follow-user"
-            label="Follow User"
+            label={checked ? "Unfollow User" : "Follow User"}
             checked={checked}
             action={() => {
-                if (followedUserInfo?.userId === user.id) {
-                    followedUserInfo = null;
+                if (followedUsers.has(user.id)) {
+                    followedUsers.delete(user.id);
                     setChecked(false);
-                    return;
+                } else {
+                    followedUsers.set(user.id, {
+                        lastChannelId: UserStore.getCurrentUser().id,
+                        userId: user.id
+                    });
+                    setChecked(true);
                 }
-
-                followedUserInfo = {
-                    lastChannelId: UserStore.getCurrentUser().id,
-                    userId: user.id
-                };
-                setChecked(true);
             }}
-        ></Menu.MenuCheckboxItem>
+        />
+    );
+};
+
+interface ChannelContextProps {
+    channel: Channel;
+}
+
+const ChannelContextPatch: NavContextMenuPatchCallback = (children, { channel }: ChannelContextProps) => {
+    if (!channel || (channel.type !== 2 && channel.type !== 13)) return;
+
+    const voiceStates = VoiceStateStore.getVoiceStatesForChannel(channel.id);
+    const userIds = Object.keys(voiceStates).filter(id => id !== UserStore.getCurrentUser()?.id);
+    if (userIds.length === 0) return;
+
+    const followedCount = userIds.filter(id => followedUsers.has(id)).length;
+
+    children.splice(
+        -1,
+        0,
+        <Menu.MenuSeparator />,
+        <Menu.MenuItem
+            label={`Follow all (${userIds.length})`}
+            id="fvu-follow-all"
+            action={() => {
+                for (const userId of userIds) {
+                    followedUsers.set(userId, {
+                        lastChannelId: channel.id,
+                        userId
+                    });
+                }
+                showToast(`Following ${userIds.length} user(s) in ${channel.name}`, Toasts.Type.SUCCESS);
+            }}
+        />,
+        <Menu.MenuCheckboxItem
+            id="fvu-follow-all-toggle"
+            label={followedCount === userIds.length ? "Unfollow all in channel" : `Follow all in channel (${userIds.length - followedCount} unfollowed)`}
+            checked={followedCount === userIds.length}
+            action={() => {
+                if (followedCount === userIds.length) {
+                    for (const userId of userIds) {
+                        followedUsers.delete(userId);
+                    }
+                    showToast(`Unfollowed all in ${channel.name}`, Toasts.Type.SUCCESS);
+                } else {
+                    for (const userId of userIds) {
+                        followedUsers.set(userId, {
+                            lastChannelId: channel.id,
+                            userId
+                        });
+                    }
+                    showToast(`Following ${userIds.length} user(s) in ${channel.name}`, Toasts.Type.SUCCESS);
+                }
+            }}
+        />
     );
 };
 
 export default definePlugin({
     name: "FollowVoiceUser",
-    description: "Follow a friend in voice chat.",
+    description: "Follow multiple users (friends or not) in voice chat.",
     tags: ["Voice"],
     authors: [EquicordDevs.TheArmagan],
     settings,
     settingsAboutComponent: () => (
         <Notice.Info>
-            This Plugin is used to follow a Friend/Friends into voice chat(s).
+            Follow multiple users into voice channels. Non-friends are supported. Right-click a user or a voice channel to manage followed users.
         </Notice.Info>
     ),
     flux: {
         async VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
-            if (!followedUserInfo) return;
-            if (!RelationshipStore.getFriendIDs().includes(followedUserInfo.userId)) return;
+            if (followedUsers.size === 0) return;
 
             if (
                 settings.store.onlyWhenInVoice
                 && !VoiceStateStore.getVoiceStateForUser(UserStore.getCurrentUser().id)
             ) return;
 
-            voiceStates.forEach(voiceState => {
-                if (
-                    voiceState.userId === followedUserInfo!.userId
-                    && voiceState.channelId
-                    && voiceState.channelId !== followedUserInfo!.lastChannelId
-                ) {
-                    followedUserInfo!.lastChannelId = voiceState.channelId;
-                    voiceChannelAction.selectVoiceChannel(followedUserInfo!.lastChannelId);
-                } else if (
-                    voiceState.userId === followedUserInfo!.userId
-                    && !voiceState.channelId
-                    && settings.store.leaveWhenUserLeaves
-                ) {
-                    voiceChannelAction.selectVoiceChannel(null);
+            const myId = UserStore.getCurrentUser().id;
+
+            for (const voiceState of voiceStates) {
+                const info = followedUsers.get(voiceState.userId);
+                if (!info) continue;
+                if (voiceState.userId === myId) continue;
+
+                if (voiceState.channelId && voiceState.channelId !== info.lastChannelId) {
+                    info.lastChannelId = voiceState.channelId;
+                    voiceChannelAction.selectVoiceChannel(voiceState.channelId);
+                } else if (!voiceState.channelId && settings.store.leaveWhenUserLeaves) {
+                    followedUsers.delete(voiceState.userId);
+                    if (followedUsers.size === 0) {
+                        voiceChannelAction.selectVoiceChannel(null);
+                    }
                 }
-            });
+            }
         }
     },
     contextMenus: {
-        "user-context": UserContextMenuPatch
+        "user-context": UserContextMenuPatch,
+        "channel-context": ChannelContextPatch
+    },
+    start() {
+        followedUsers.clear();
+    },
+    stop() {
+        followedUsers.clear();
     }
 });
