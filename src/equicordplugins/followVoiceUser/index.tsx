@@ -3,9 +3,9 @@ import { definePluginSettings } from "@api/Settings";
 import { Notice } from "@components/Notice";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import type { Channel, User, VoiceState } from "@vencord/discord-types";
+import type { User, VoiceState } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
-import { Menu, React, showToast, Toasts, UserStore, VoiceStateStore } from "@webpack/common";
+import { Menu, React, UserStore, VoiceStateStore } from "@webpack/common";
 
 interface FollowEntry {
     lastChannelId: string;
@@ -25,14 +25,12 @@ const settings = definePluginSettings({
     leaveWhenUserLeaves: {
         type: OptionType.BOOLEAN,
         default: false,
-        description: "Leave the voice channel when all followed users leave"
+        description: "Leave the voice channel when the followed user leaves"
     }
 });
 
 interface UserContextProps {
-    channel?: Channel;
     user: User;
-    guildId?: string;
 }
 
 const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: UserContextProps) => {
@@ -62,60 +60,6 @@ const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: U
     );
 };
 
-interface ChannelContextProps {
-    channel: Channel;
-}
-
-const ChannelContextPatch: NavContextMenuPatchCallback = (children, { channel }: ChannelContextProps) => {
-    if (!channel || (channel.type !== 2 && channel.type !== 13)) return;
-
-    const voiceStates = VoiceStateStore.getVoiceStatesForChannel(channel.id);
-    const userIds = Object.keys(voiceStates).filter(id => id !== UserStore.getCurrentUser()?.id);
-    if (userIds.length === 0) return;
-
-    const followedCount = userIds.filter(id => followedUsers.has(id)).length;
-
-    children.splice(
-        -1,
-        0,
-        <Menu.MenuSeparator />,
-        <Menu.MenuItem
-            label={`Follow all (${userIds.length})`}
-            id="fvu-follow-all"
-            action={() => {
-                for (const userId of userIds) {
-                    followedUsers.set(userId, {
-                        lastChannelId: channel.id,
-                        userId
-                    });
-                }
-                showToast(`Following ${userIds.length} user(s) in ${channel.name}`, Toasts.Type.SUCCESS);
-            }}
-        />,
-        <Menu.MenuCheckboxItem
-            id="fvu-follow-all-toggle"
-            label={followedCount === userIds.length ? "Unfollow all in channel" : `Follow all in channel (${userIds.length - followedCount} unfollowed)`}
-            checked={followedCount === userIds.length}
-            action={() => {
-                if (followedCount === userIds.length) {
-                    for (const userId of userIds) {
-                        followedUsers.delete(userId);
-                    }
-                    showToast(`Unfollowed all in ${channel.name}`, Toasts.Type.SUCCESS);
-                } else {
-                    for (const userId of userIds) {
-                        followedUsers.set(userId, {
-                            lastChannelId: channel.id,
-                            userId
-                        });
-                    }
-                    showToast(`Following ${userIds.length} user(s) in ${channel.name}`, Toasts.Type.SUCCESS);
-                }
-            }}
-        />
-    );
-};
-
 export default definePlugin({
     name: "FollowVoiceUser",
     description: "Follow multiple users (friends or not) in voice chat.",
@@ -124,7 +68,7 @@ export default definePlugin({
     settings,
     settingsAboutComponent: () => (
         <Notice.Info>
-            Follow multiple users into voice channels. Non-friends are supported. Right-click a user or a voice channel to manage followed users.
+            Follow multiple users into voice channels. Non-friends are supported.
         </Notice.Info>
     ),
     flux: {
@@ -156,8 +100,7 @@ export default definePlugin({
         }
     },
     contextMenus: {
-        "user-context": UserContextMenuPatch,
-        "channel-context": ChannelContextPatch
+        "user-context": UserContextMenuPatch
     },
     start() {
         followedUsers.clear();
