@@ -17,7 +17,10 @@ const settings = definePluginSettings({
 });
 
 const deleteQueue = new Queue();
-const DELETE_DELAY_MS = 350;
+
+function randomDelay() {
+    return Math.random() * 4000 + 1000;
+}
 
 interface UserContextProps {
     channel?: Channel;
@@ -48,34 +51,30 @@ async function fetchAllMessages(channelId: string, before?: string): Promise<any
     return messages;
 }
 
-function queueDelete(channelId: string, msgId: string): Promise<void> {
-    return new Promise(resolve => {
-        deleteQueue.push(async () => {
-            if (settings.store.antiLog) {
-                FluxDispatcher.dispatch({
-                    type: "MESSAGE_DELETE",
-                    channelId,
-                    id: msgId,
-                    mlDeleted: true
-                });
-                await sleep(50);
-            }
-
-            try {
-                await MessageActions.deleteMessage(channelId, msgId);
-            } catch (e: any) {
-                if (e?.status === 429) {
-                    const retryAfter = (e?.body?.retry_after ?? 1) * 1000;
-                    await sleep(retryAfter);
-                    deleteQueue.unshift(async () => {
-                        await MessageActions.deleteMessage(channelId, msgId);
-                    });
-                }
-            }
-            await sleep(DELETE_DELAY_MS);
-            resolve();
+async function deleteWithRetry(channelId: string, msgId: string): Promise<void> {
+    if (settings.store.antiLog) {
+        FluxDispatcher.dispatch({
+            type: "MESSAGE_DELETE",
+            channelId,
+            id: msgId,
+            mlDeleted: true
         });
-    });
+        await sleep(50);
+    }
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+            await MessageActions.deleteMessage(channelId, msgId);
+            return;
+        } catch (e: any) {
+            if (e?.status === 429) {
+                const retryAfter = ((e?.body?.retry_after ?? 1) * 1000) + 500;
+                await sleep(retryAfter);
+                continue;
+            }
+            throw e;
+        }
+    }
 }
 
 const UserContextPatch: NavContextMenuPatchCallback = (children, { user }: UserContextProps) => {
@@ -108,13 +107,33 @@ const UserContextPatch: NavContextMenuPatchCallback = (children, { user }: UserC
                             return;
                         }
 
-                        showToast(`Deleting ${myMessages.length} messages...`, Toasts.Type.CUSTOM);
+                        const total = myMessages.length;
+                        let deleted = 0;
+                        let failed = 0;
+
+                        showToast(`Deleting 0/${total}...`, Toasts.Type.CUSTOM);
 
                         for (const msg of myMessages) {
-                            await queueDelete(dmChannelId, msg.id);
+                            await new Promise<void>(resolve => {
+                                deleteQueue.push(async () => {
+                                    try {
+                                        await deleteWithRetry(dmChannelId, msg.id);
+                                        deleted++;
+                                    } catch {
+                                        failed++;
+                                    }
+                                    showToast(`Deleting ${deleted}/${total}...`, Toasts.Type.CUSTOM);
+                                    await sleep(randomDelay());
+                                    resolve();
+                                });
+                            });
                         }
 
-                        showToast("DM cleared.", Toasts.Type.SUCCESS);
+                        if (failed === 0) {
+                            showToast(`DM cleared. (${deleted} deleted)`, Toasts.Type.SUCCESS);
+                        } else {
+                            showToast(`Done. ${deleted} deleted, ${failed} failed.`, Toasts.Type.FAILURE);
+                        }
                     }
                 });
             }}
